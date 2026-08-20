@@ -1,0 +1,220 @@
+/**
+ * País → Departamento/Estado → Ciudad cascading data used by the provider
+ * form. Ported from the design mockup. Custom (user-typed) countries /
+ * regions / cities entered through the form are tracked separately in the
+ * providers store so they show up in filters too.
+ */
+export interface GeoNode {
+  label: string; // "Departamento" | "Estado"
+  regions: Record<string, string[]>;
+}
+
+export const GEO: Record<string, GeoNode> = {
+  Colombia: {
+    label: "Departamento",
+    regions: {
+      Amazonas: ["Leticia", "Puerto Nariño"],
+      Antioquia: [
+        "Medellín",
+        "Bello",
+        "Itagüí",
+        "Envigado",
+        "Apartadó",
+        "Turbo",
+        "Rionegro",
+        "Sabaneta",
+        "La Estrella",
+        "Copacabana",
+      ],
+      Arauca: ["Arauca", "Saravena", "Tame"],
+      Atlántico: ["Barranquilla", "Soledad", "Malambo", "Sabanalarga", "Santo Tomás"],
+      "Bogotá D.C.": ["Bogotá"],
+      Bolívar: ["Cartagena", "Magangué", "El Carmen de Bolívar", "Turbaco"],
+      Boyacá: ["Tunja", "Duitama", "Sogamoso", "Chiquinquirá"],
+      Caldas: ["Manizales", "Villamaría", "La Dorada", "Chinchiná"],
+      Caquetá: ["Florencia", "San Vicente del Caguán"],
+      Casanare: ["Yopal", "Aguazul", "Paz de Ariporo"],
+      Cauca: ["Popayán", "Santander de Quilichao", "Puerto Tejada"],
+      César: ["Valledupar", "Aguachica", "Bosconia"],
+      Chocó: ["Quibdó", "Istmina", "Tadó"],
+      Córdoba: ["Montería", "Cereté", "Lorica", "Sahagún"],
+      Cundinamarca: [
+        "Soacha",
+        "Fusagasugá",
+        "Facatativá",
+        "Zipaquirá",
+        "Girardot",
+        "Chía",
+        "Cajicá",
+      ],
+      Guainía: ["Inírida"],
+      Guaviare: ["San José del Guaviare"],
+      Huila: ["Neiva", "Pitalito", "Garzón", "La Plata"],
+      "La Guajira": ["Riohacha", "Maicao", "Uribia"],
+      Magdalena: ["Santa Marta", "Ciénaga", "Fundación"],
+      Meta: ["Villavicencio", "Acacías", "Granada"],
+      Nariño: ["Pasto", "Tumaco", "Ipiales", "Túquerres"],
+      "Norte de Santander": ["Cúcuta", "Ocaña", "Pamplona", "Villa del Rosario"],
+      Putumayo: ["Mocoa", "Puerto Asís"],
+      Quindío: ["Armenia", "Calarcá", "Montenegro"],
+      Risaralda: ["Pereira", "Dosquebradas", "Santa Rosa de Cabal"],
+      "San Andrés y Providencia": ["San Andrés", "Providencia"],
+      Santander: ["Bucaramanga", "Floridablanca", "Girón", "Piedecuesta", "Barrancabermeja"],
+      Sucre: ["Sincelejo", "Corozal", "Sampués"],
+      Tolima: ["Ibagué", "Espinal", "Melgar", "Chaparral"],
+      "Valle del Cauca": [
+        "Cali",
+        "Buenaventura",
+        "Palmira",
+        "Tuluá",
+        "Cartago",
+        "Buga",
+        "Yumbo",
+      ],
+      Vaupés: ["Mitú"],
+      Vichada: ["Puerto Carreño"],
+    },
+  },
+  México: {
+    label: "Estado",
+    regions: {
+      Aguascalientes: ["Aguascalientes", "Jesús María", "Calvillo"],
+      "Baja California": ["Tijuana", "Mexicali", "Ensenada", "Rosarito"],
+      "Baja California Sur": ["La Paz", "Los Cabos", "Loreto"],
+      Campeche: ["Campeche", "Ciudad del Carmen"],
+      Chiapas: ["Tuxtla Gutiérrez", "San Cristóbal de las Casas", "Tapachula"],
+      Chihuahua: ["Chihuahua", "Ciudad Juárez", "Delicias", "Cuauhtémoc"],
+      "Ciudad de México": [
+        "Benito Juárez",
+        "Miguel Hidalgo",
+        "Coyoacán",
+        "Cuauhtémoc",
+        "Álvaro Obregón",
+        "Tlalpan",
+        "Iztapalapa",
+      ],
+      Coahuila: ["Saltillo", "Torreón", "Monclova", "Piedras Negras"],
+      Colima: ["Colima", "Manzanillo", "Tecomán"],
+      Durango: ["Durango", "Gómez Palacio", "Lerdo"],
+      Guanajuato: ["León", "Irapuato", "Celaya", "Salamanca", "Guanajuato"],
+      Guerrero: ["Acapulco", "Chilpancingo", "Iguala", "Zihuatanejo"],
+      Hidalgo: ["Pachuca", "Tulancingo", "Tula de Allende"],
+      Jalisco: ["Guadalajara", "Zapopan", "Tlaquepaque", "Tonalá", "Puerto Vallarta"],
+      "Estado de México": [
+        "Ecatepec",
+        "Naucalpan",
+        "Tlalnepantla",
+        "Toluca",
+        "Neza",
+        "Chimalhuacán",
+      ],
+      Michoacán: ["Morelia", "Uruapan", "Apatzingán", "Zamora"],
+      Morelos: ["Cuernavaca", "Jiutepec", "Cuautla"],
+      Nayarit: ["Tepic", "Bahía de Banderas", "Xalisco"],
+      "Nuevo León": [
+        "Monterrey",
+        "San Nicolás",
+        "Guadalupe",
+        "Apodaca",
+        "San Pedro Garza García",
+        "Santa Catarina",
+      ],
+      Oaxaca: ["Oaxaca de Juárez", "Tuxtepec", "Juchitán", "Puerto Escondido"],
+      Puebla: ["Puebla", "Tehuacán", "San Andrés Cholula", "Atlixco"],
+      Querétaro: ["Querétaro", "San Juan del Río", "Corregidora"],
+      "Quintana Roo": ["Cancún", "Playa del Carmen", "Cozumel", "Tulum", "Chetumal"],
+      "San Luis Potosí": ["San Luis Potosí", "Ciudad Valles", "Matehuala"],
+      Sinaloa: ["Culiacán", "Mazatlán", "Los Mochis", "Guasave"],
+      Sonora: ["Hermosillo", "Ciudad Obregón", "Nogales", "Guaymas"],
+      Tabasco: ["Villahermosa", "Cárdenas", "Comalcalco"],
+      Tamaulipas: ["Reynosa", "Matamoros", "Nuevo Laredo", "Tampico", "Victoria"],
+      Tlaxcala: ["Tlaxcala", "Apizaco", "Huamantla"],
+      Veracruz: ["Veracruz", "Xalapa", "Coatzacoalcos", "Córdoba", "Orizaba"],
+      Yucatán: ["Mérida", "Valladolid", "Tizimín"],
+      Zacatecas: ["Zacatecas", "Fresnillo", "Guadalupe"],
+    },
+  },
+  "Estados Unidos": {
+    label: "Estado",
+    regions: {
+      Alabama: ["Birmingham", "Montgomery", "Huntsville"],
+      Alaska: ["Anchorage", "Juneau", "Fairbanks"],
+      Arizona: ["Phoenix", "Tucson", "Scottsdale", "Tempe"],
+      Arkansas: ["Little Rock", "Fort Smith", "Fayetteville"],
+      California: [
+        "Los Angeles",
+        "San Francisco",
+        "San Diego",
+        "Sacramento",
+        "San Jose",
+        "Fresno",
+        "Oakland",
+      ],
+      Colorado: ["Denver", "Colorado Springs", "Aurora", "Boulder"],
+      Connecticut: ["Hartford", "New Haven", "Bridgeport"],
+      Delaware: ["Wilmington", "Dover"],
+      Florida: ["Miami", "Orlando", "Tampa", "Jacksonville", "Fort Lauderdale", "Hialeah"],
+      Georgia: ["Atlanta", "Augusta", "Savannah", "Columbus"],
+      Hawaii: ["Honolulu", "Pearl City", "Hilo"],
+      Idaho: ["Boise", "Meridian", "Nampa"],
+      Illinois: ["Chicago", "Aurora", "Rockford", "Naperville"],
+      Indiana: ["Indianapolis", "Fort Wayne", "Evansville"],
+      Iowa: ["Des Moines", "Cedar Rapids", "Davenport"],
+      Kansas: ["Wichita", "Overland Park", "Kansas City"],
+      Kentucky: ["Louisville", "Lexington", "Bowling Green"],
+      Louisiana: ["New Orleans", "Baton Rouge", "Shreveport"],
+      Maine: ["Portland", "Lewiston", "Bangor"],
+      Maryland: ["Baltimore", "Frederick", "Rockville"],
+      Massachusetts: ["Boston", "Worcester", "Springfield", "Cambridge"],
+      Michigan: ["Detroit", "Grand Rapids", "Warren", "Sterling Heights"],
+      Minnesota: ["Minneapolis", "Saint Paul", "Rochester"],
+      Mississippi: ["Jackson", "Gulfport", "Southaven"],
+      Missouri: ["Kansas City", "Saint Louis", "Springfield"],
+      Montana: ["Billings", "Missoula", "Great Falls"],
+      Nebraska: ["Omaha", "Lincoln", "Bellevue"],
+      Nevada: ["Las Vegas", "Henderson", "Reno"],
+      "New Hampshire": ["Manchester", "Nashua", "Concord"],
+      "New Jersey": ["Newark", "Jersey City", "Paterson", "Trenton"],
+      "New Mexico": ["Albuquerque", "Las Cruces", "Rio Rancho"],
+      "New York": ["New York City", "Buffalo", "Rochester", "Yonkers", "Syracuse"],
+      "North Carolina": ["Charlotte", "Raleigh", "Greensboro", "Durham"],
+      "North Dakota": ["Fargo", "Bismarck", "Grand Forks"],
+      Ohio: ["Columbus", "Cleveland", "Cincinnati", "Toledo"],
+      Oklahoma: ["Oklahoma City", "Tulsa", "Norman"],
+      Oregon: ["Portland", "Salem", "Eugene"],
+      Pennsylvania: ["Philadelphia", "Pittsburgh", "Allentown", "Erie"],
+      "Rhode Island": ["Providence", "Warwick", "Cranston"],
+      "South Carolina": ["Columbia", "Charleston", "Greenville"],
+      "South Dakota": ["Sioux Falls", "Rapid City", "Aberdeen"],
+      Tennessee: ["Nashville", "Memphis", "Knoxville", "Chattanooga"],
+      Texas: ["Houston", "San Antonio", "Dallas", "Austin", "Fort Worth", "El Paso", "Arlington"],
+      Utah: ["Salt Lake City", "West Valley City", "Provo"],
+      Vermont: ["Burlington", "South Burlington", "Rutland"],
+      Virginia: ["Virginia Beach", "Norfolk", "Chesapeake", "Richmond"],
+      Washington: ["Seattle", "Spokane", "Tacoma", "Vancouver"],
+      "West Virginia": ["Charleston", "Huntington", "Morgantown"],
+      Wisconsin: ["Milwaukee", "Madison", "Green Bay"],
+      Wyoming: ["Cheyenne", "Casper", "Laramie"],
+    },
+  },
+};
+
+export const COUNTRY_FLAG: Record<string, string> = {
+  Colombia: "🇨🇴",
+  México: "🇲🇽",
+  "Estados Unidos": "🇺🇸",
+};
+
+export function countryFlag(pais: string | undefined): string {
+  if (!pais) return "🌐";
+  return COUNTRY_FLAG[pais] ?? "🌐";
+}
+
+export type CountryBadgeClass = "co" | "mx" | "us" | "other";
+
+export function countryBadgeClass(pais: string | undefined): CountryBadgeClass {
+  if (pais === "Colombia") return "co";
+  if (pais === "México") return "mx";
+  if (pais === "Estados Unidos") return "us";
+  return "other";
+}
