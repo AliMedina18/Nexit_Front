@@ -24,37 +24,41 @@ export function ProjectCard({
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())}
-      className="cursor-pointer rounded-[var(--radius-lg)] border border-border bg-surface p-4 transition-shadow hover:border-border-strong hover:shadow-md"
+      className="cursor-pointer rounded-[var(--radius-md)] border border-border bg-surface p-3 transition-shadow hover:border-border-strong hover:shadow-sm"
     >
-      <div className="text-sm font-semibold">{project.nombre || "(Sin nombre)"}</div>
-      <div className="mt-0.5 text-xs text-text-2">{project.cliente || "Sin cliente"}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-[13px] font-semibold leading-tight">{project.nombre || "(Sin nombre)"}</div>
+          <div className="mt-0.5 truncate text-[11px] text-text-2">{project.cliente || "Sin cliente"}</div>
+        </div>
+        <span className="flex-shrink-0 text-[11px] text-text-2">{fmtDateShort(project.fecha)}</span>
+      </div>
 
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+      <div className="mt-2 flex flex-wrap items-center gap-1">
         <Badge bg={st.bg} color={st.c}>
           {project.estado}
         </Badge>
         <Badge bg={bst.bg} color={bst.c}>
           {project.briefEstado}
         </Badge>
-        <span className="text-xs text-text-2">{fmtDateShort(project.fecha)}</span>
       </div>
 
-      <div className="mt-2.5 flex items-center gap-2 border-t border-border pt-2.5">
+      <div className="mt-2 flex items-center gap-2 border-t border-border pt-2">
         {assigned.length > 0 ? (
-          <div className="flex">
-            {assigned.slice(0, 5).map((p, i) => (
-              <div key={p.id} style={{ marginLeft: i === 0 ? 0 : -8 }}>
-                <Avatar nombre={p.nombre} idx={providers.indexOf(p)} size="sm" />
-              </div>
-            ))}
-          </div>
+          <>
+            <div className="flex">
+              {assigned.slice(0, 4).map((p, i) => (
+                <div key={p.id} style={{ marginLeft: i === 0 ? 0 : -6 }} className="rounded-full ring-2 ring-surface">
+                  <Avatar nombre={p.nombre} idx={providers.indexOf(p)} size="sm" />
+                </div>
+              ))}
+            </div>
+            <span className="text-[11px] text-text-2">
+              {assigned.length} proveedor{assigned.length === 1 ? "" : "es"}
+            </span>
+          </>
         ) : (
-          <span className="text-xs text-red">Sin proveedores asignados</span>
-        )}
-        {assigned.length > 0 && (
-          <span className="text-xs text-text-2">
-            {assigned.length} proveedor{assigned.length === 1 ? "" : "es"}
-          </span>
+          <span className="text-[11px] font-medium text-red">Sin proveedores asignados</span>
         )}
       </div>
     </div>

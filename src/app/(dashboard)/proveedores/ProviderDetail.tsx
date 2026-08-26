@@ -1,10 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Avatar, Badge, Button, Stars, Tag } from "@/components/ui/primitives";
+import { Download, ExternalLink, Pencil, Trash2, Upload, X } from "lucide-react";
+import { Avatar, Badge, Button, CountryBadge, Stars, Tag } from "@/components/ui/primitives";
 import { Drawer, DrawerCloseButton, DrawerHeader, DrawerSection, KeyValue, NoteBox } from "@/components/ui/Drawer";
 import { PROVIDER_STATUS_COLORS } from "@/lib/constants";
-import { countryFlag } from "@/lib/geo";
 import { fileIcon, fmtSize } from "@/lib/format";
 import { nextStringId } from "@/lib/id";
 import { useUiStore } from "@/store/ui-store";
@@ -38,7 +38,7 @@ export function ProviderDetail({
   function copyContact() {
     if (!provider) return;
     const txt = `${provider.nombre}\n${provider.contacto}\n${provider.tel}\n${provider.email}`;
-    navigator.clipboard?.writeText(txt).then(() => pushToast("Contacto copiado", "📋"));
+    navigator.clipboard?.writeText(txt).then(() => pushToast("Contacto copiado", "info"));
   }
 
   return (
@@ -54,7 +54,7 @@ export function ProviderDetail({
 
       <div className="flex-1 p-5">
         <DrawerSection title="Evaluación" />
-        <Stars n={provider.score} size="lg" />
+        <Stars n={provider.score} size={18} />
         <div className="mt-2">
           <Badge bg={sc.bg} color={sc.c}>
             {provider.status}
@@ -62,7 +62,7 @@ export function ProviderDetail({
         </div>
 
         <DrawerSection title="Ubicación" />
-        <KeyValue k="País" v={`${countryFlag(provider.pais)} ${provider.pais || "—"}`} />
+        <KeyValue k="País" v={<span className="flex items-center gap-1.5"><CountryBadge pais={provider.pais} /> {provider.pais || "—"}</span>} />
         <KeyValue k="Región" v={provider.region || "—"} />
         <KeyValue k="Ciudad" v={provider.ciudad || "—"} />
         <KeyValue k="Cobertura" v={provider.cobertura || "—"} />
@@ -95,16 +95,16 @@ export function ProviderDetail({
           </>
         )}
 
-        <DrawerSection title={`📎 Archivos y links (${provider.attachments.length})`} />
+        <DrawerSection title={`Archivos y links (${provider.attachments.length})`} />
         <AttachmentsSection attachments={provider.attachments} onChange={onAttachmentsChange} />
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-border p-4">
-        <Button variant="primary" onClick={onEdit}>
-          ✏️ Editar
+        <Button variant="primary" icon={Pencil} onClick={onEdit}>
+          Editar
         </Button>
-        <Button variant="danger" onClick={onDelete}>
-          🗑 Eliminar
+        <Button variant="danger" icon={Trash2} onClick={onDelete}>
+          Eliminar
         </Button>
       </div>
     </Drawer>
@@ -193,10 +193,10 @@ function AttachmentsSection({
           setDragOver(false);
           handleFiles(e.dataTransfer.files);
         }}
-        className="mb-2.5 cursor-pointer rounded-[var(--radius-md)] border-[1.5px] border-dashed p-3.5 text-center transition-colors"
+        className="mb-2.5 flex cursor-pointer flex-col items-center gap-1 rounded-[var(--radius-md)] border-[1.5px] border-dashed p-3.5 text-center transition-colors"
         style={{ borderColor: dragOver ? "var(--teal-mid)" : "var(--border-strong)", background: dragOver ? "var(--teal-light)" : "transparent" }}
       >
-        <span className="mb-1 block text-[22px]">📎</span>
+        <Upload size={18} strokeWidth={1.5} className="text-text-3" />
         <span className="pointer-events-none text-xs text-text-2">
           Arrastra archivos aquí o haz clic para subir
         </span>
@@ -235,43 +235,46 @@ function AttachmentsSection({
         {attachments.length === 0 && (
           <div className="py-2 text-center text-xs text-text-3">Sin archivos ni links aún</div>
         )}
-        {attachments.map((a) => (
-          <div key={a.id} className="flex items-center gap-2 rounded-[var(--radius-md)] bg-gray-light px-2.5 py-2">
-            <span className="flex-shrink-0 text-lg">{fileIcon(a.name, a.type)}</span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium">{a.name}</div>
-              <div className="mt-0.5 truncate text-[11px] text-text-3">{a.meta}</div>
-            </div>
-            <div className="flex flex-shrink-0 gap-1">
-              {a.type === "file" ? (
+        {attachments.map((a) => {
+          const Icon = fileIcon(a.name, a.type);
+          return (
+            <div key={a.id} className="flex items-center gap-2 rounded-[var(--radius-md)] bg-gray-light px-2.5 py-2">
+              <Icon size={16} strokeWidth={1.75} className="flex-shrink-0 text-text-2" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium">{a.name}</div>
+                <div className="mt-0.5 truncate text-[11px] text-text-3">{a.meta}</div>
+              </div>
+              <div className="flex flex-shrink-0 gap-1">
+                {a.type === "file" ? (
+                  <button
+                    onClick={() => download(a)}
+                    className="flex cursor-pointer items-center rounded border-none bg-transparent p-1 text-text-2 hover:bg-border"
+                    aria-label="Descargar"
+                  >
+                    <Download size={14} strokeWidth={2} />
+                  </button>
+                ) : (
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex cursor-pointer items-center rounded p-1 text-text-2 hover:bg-border"
+                    aria-label="Abrir link"
+                  >
+                    <ExternalLink size={14} strokeWidth={2} />
+                  </a>
+                )}
                 <button
-                  onClick={() => download(a)}
-                  className="cursor-pointer rounded border-none bg-transparent px-1 py-0.5 text-[15px] text-text-2 hover:bg-border"
-                  aria-label="Descargar"
+                  onClick={() => removeAttachment(a.id)}
+                  className="flex cursor-pointer items-center rounded border-none bg-transparent p-1 text-red hover:bg-border"
+                  aria-label="Eliminar"
                 >
-                  ⬇
+                  <X size={14} strokeWidth={2} />
                 </button>
-              ) : (
-                <a
-                  href={a.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="cursor-pointer rounded px-1 py-0.5 text-[15px] text-text-2 hover:bg-border"
-                  aria-label="Abrir link"
-                >
-                  ↗
-                </a>
-              )}
-              <button
-                onClick={() => removeAttachment(a.id)}
-                className="cursor-pointer rounded border-none bg-transparent px-1 py-0.5 text-[15px] text-red hover:bg-border"
-                aria-label="Eliminar"
-              >
-                🗑
-              </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -142,10 +142,23 @@ export interface Project {
 
 export type ProjectInput = Omit<Project, "id">;
 
+export type Rol = "super_admin" | "admin" | "manager" | "miembro";
+
 export interface AuthUser {
+  /** UUID real de Supabase Auth (session.user.id). */
+  id: string;
   email: string;
   displayName: string;
   initials: string;
+  /**
+   * Rol de negocio. Viene de GET /api/usuarios/me (agregado 2026-08-26, ver
+   * auth-store.ts) apenas carga esa respuesta; mientras tanto, y si esa cuenta
+   * todavía no tiene fila de negocio (recién invitada, o el super_admin sembrado
+   * a mano), se usa el claim `user_role` del JWT (Auth Hook de Supabase -- ver
+   * Nexit_Back/docs/schema/03_auth_hook_custom_claims.sql) y `displayName`/
+   * `initials` se derivan del correo como aproximación.
+   */
+  rol: Rol;
 }
 
 export interface MetricSnapshot {

@@ -1,3 +1,12 @@
+import {
+  FileArchive,
+  FileAudio,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  FileVideo,
+  type LucideIcon,
+} from "lucide-react";
 import type { BriefStatus, ProjectStatus, ProviderStatus } from "@/types/domain";
 
 export const AVATAR_COLORS: { bg: string; text: string }[] = [
@@ -36,21 +45,29 @@ export const BRIEF_STATUS_COLORS: Record<BriefStatus, { bg: string; c: string }>
   Aprobado: { bg: "#EAF3DE", c: "#27500A" },
 };
 
-export const FILE_ICONS: Record<string, string> = {
-  pdf: "📄",
-  doc: "📝",
-  docx: "📝",
-  xls: "📊",
-  xlsx: "📊",
-  ppt: "📋",
-  pptx: "📋",
-  jpg: "🖼",
-  jpeg: "🖼",
-  png: "🖼",
-  gif: "🖼",
-  mp4: "🎬",
-  mov: "🎬",
-  mp3: "🎵",
-  zip: "🗜",
-  rar: "🗜",
+/** Country badge colors (2-letter code chip), replacing flag emoji. */
+export const COUNTRY_BADGE_COLORS: Record<string, { bg: string; c: string }> = {
+  CO: { bg: "#FAEEDA", c: "#854F0B" },
+  MX: { bg: "#E6F1FB", c: "#185FA5" },
+  US: { bg: "#EAF3DE", c: "#27500A" },
+  OTHER: { bg: "var(--gray-light)", c: "var(--text-2)" },
+};
+
+export const FILE_TYPE_ICONS: Record<string, LucideIcon> = {
+  pdf: FileText,
+  doc: FileText,
+  docx: FileText,
+  xls: FileSpreadsheet,
+  xlsx: FileSpreadsheet,
+  ppt: FileText,
+  pptx: FileText,
+  jpg: FileImage,
+  jpeg: FileImage,
+  png: FileImage,
+  gif: FileImage,
+  mp4: FileVideo,
+  mov: FileVideo,
+  mp3: FileAudio,
+  zip: FileArchive,
+  rar: FileArchive,
 };

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Users } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/primitives";
 import { Field, FieldGroup, Input, Row, Select, Textarea } from "@/components/ui/form";
@@ -126,7 +127,7 @@ export function ProjectFormModal({
         <Input type="date" value={form.fecha} onChange={(e) => set("fecha", e.target.value)} />
       </Field>
 
-      <FieldGroup title="👥 Equipo del proyecto">
+      <FieldGroup title={<span className="inline-flex items-center gap-1.5"><Users size={12} strokeWidth={2} /> Equipo del proyecto</span>}>
         <Field label="Ejecutivo encargado">
           <Input
             value={form.ejecutivo}

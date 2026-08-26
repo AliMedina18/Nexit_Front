@@ -1,17 +1,18 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { BarChart3, Building2, CalendarDays, FolderKanban } from "lucide-react";
 import { Avatar, Button, TabButton, TabsShell } from "@/components/ui/primitives";
+import { Logo, NexitWordmark } from "@/components/ui/Logo";
 import { useAuthStore } from "@/store/auth-store";
 
 const TABS = [
-  { href: "/proveedores", label: "Proveedores" },
-  { href: "/proyectos", label: "Proyectos" },
-  { href: "/panel", label: "Panel de control" },
-  { href: "/informe", label: "📊 Informe" },
+  { href: "/proveedores", label: "Proveedores", icon: Building2 },
+  { href: "/proyectos", label: "Proyectos", icon: FolderKanban },
+  { href: "/calendario", label: "Calendario", icon: CalendarDays },
+  { href: "/informe", label: "Informe", icon: BarChart3 },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -31,15 +32,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="grid min-h-screen grid-rows-[auto_1fr]">
       <header className="sticky top-0 z-10 flex items-center gap-4 border-b border-border bg-surface px-6 py-3.5">
         <div className="flex items-center gap-2.5">
-          <Image src="/logo.png" alt="Next Marketing Experiencial" width={104} height={26} style={{ height: 26, width: "auto" }} priority />
+          <Logo />
           <span className="h-5 w-px bg-border-strong" />
-          <span className="text-[15px] font-semibold tracking-tight">Nexus</span>
+          <NexitWordmark />
         </div>
 
         <TabsShell>
           {TABS.map((tab) => (
             <Link key={tab.href} href={tab.href}>
-              <TabButton active={pathname.startsWith(tab.href)}>{tab.label}</TabButton>
+              <TabButton active={pathname.startsWith(tab.href)} icon={tab.icon}>
+                {tab.label}
+              </TabButton>
             </Link>
           ))}
         </TabsShell>
@@ -51,8 +54,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </span>
           <Button
             size="sm"
-            onClick={() => {
-              logout();
+            onClick={async () => {
+              await logout();
               router.replace("/login");
             }}
           >

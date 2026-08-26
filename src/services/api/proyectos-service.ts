@@ -1,0 +1,26 @@
+import { apiClient } from "@/lib/api-client";
+import type { Proyecto, ProyectoInput, ProyectoPrioridad, SeguimientoProyecto, SeguimientoProyectoInput } from "@/types/api";
+
+/**
+ * Conecta contra ProyectosController real (Nexit_Back). DELETE requiere
+ * admin/super_admin. `gerenteId` solo lo puede fijar explícito un
+ * admin/super_admin -- si un gerente crea/edita sin mandarlo, el backend
+ * lo autoasigna a sí mismo.
+ *
+ * `listarSeguimiento` trae la bitácora completa (más reciente primero);
+ * `agregarSeguimiento` solo agrega una entrada nueva y devuelve esa entrada.
+ */
+export const proyectosApi = {
+  list: () => apiClient.get<Proyecto[]>("/api/proyectos"),
+  getById: (id: string) => apiClient.get<Proyecto>(`/api/proyectos/${id}`),
+  /** "A qué proyecto atender primero" (docs/21, docs/22). */
+  prioridad: () => apiClient.get<ProyectoPrioridad[]>("/api/proyectos/prioridad"),
+  create: (input: ProyectoInput) => apiClient.post<Proyecto>("/api/proyectos", input),
+  update: (id: string, input: ProyectoInput) => apiClient.put<Proyecto>(`/api/proyectos/${id}`, { ...input, id }),
+  remove: (id: string) => apiClient.delete<void>(`/api/proyectos/${id}`),
+  agregarSeguimiento: (proyectoId: string, input: SeguimientoProyectoInput) =>
+    apiClient.post<SeguimientoProyecto>(`/api/proyectos/${proyectoId}/seguimiento`, input),
+  /** Bitácora completa del proyecto, más reciente primero (agregado 2026-08-26). */
+  listarSeguimiento: (proyectoId: string) =>
+    apiClient.get<SeguimientoProyecto[]>(`/api/proyectos/${proyectoId}/seguimiento`),
+};

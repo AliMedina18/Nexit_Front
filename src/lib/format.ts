@@ -1,4 +1,6 @@
-import { AVATAR_COLORS, FILE_ICONS } from "./constants";
+import type { LucideIcon } from "lucide-react";
+import { File as FileIconDefault, Link2 } from "lucide-react";
+import { AVATAR_COLORS, FILE_TYPE_ICONS } from "./constants";
 
 export function initials(nombre: string): string {
   return nombre
@@ -13,15 +15,10 @@ export function avatarColor(idx: number) {
   return AVATAR_COLORS[idx % AVATAR_COLORS.length];
 }
 
-export function stars(n: number): string {
-  const clamped = Math.max(0, Math.min(5, n));
-  return "★".repeat(clamped) + "☆".repeat(5 - clamped);
-}
-
-export function fileIcon(name: string, type: "file" | "link"): string {
-  if (type === "link") return "🔗";
+export function fileIcon(name: string, type: "file" | "link"): LucideIcon {
+  if (type === "link") return Link2;
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  return FILE_ICONS[ext] ?? "📎";
+  return FILE_TYPE_ICONS[ext] ?? FileIconDefault;
 }
 
 export function fmtSize(bytes?: number): string {

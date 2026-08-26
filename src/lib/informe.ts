@@ -83,12 +83,12 @@ export interface Delta {
 }
 
 export function deltaLabel(current: number, previous: number | null | undefined, periodWord: string): Delta {
-  if (previous === null || previous === undefined) return { text: "— sin dato previo", cls: "flat" };
+  if (previous === null || previous === undefined) return { text: "Sin dato previo", cls: "flat" };
   const diff = current - previous;
   const suffix = periodWord === "el mes" ? "o" : "a";
-  if (diff === 0) return { text: `— igual que ${periodWord} pasad${suffix}`, cls: "flat" };
+  if (diff === 0) return { text: `Igual que ${periodWord} pasad${suffix}`, cls: "flat" };
   return {
-    text: `${diff > 0 ? "▲" : "▼"} ${diff > 0 ? "+" : ""}${diff} vs. ${periodWord} pasad${suffix}`,
+    text: `${diff > 0 ? "+" : ""}${diff} vs. ${periodWord} pasad${suffix}`,
     cls: diff > 0 ? "up" : "down",
   };
 }

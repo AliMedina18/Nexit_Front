@@ -2,7 +2,10 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import clsx from "clsx";
-import { avatarColor, initials, stars } from "@/lib/format";
+import { Search, Star, X, type LucideIcon } from "lucide-react";
+import { avatarColor, initials } from "@/lib/format";
+import { COUNTRY_BADGE_COLORS } from "@/lib/constants";
+import { countryCode } from "@/lib/geo";
 
 /* -------------------------------------------------------------------------- */
 /* Button                                                                      */
@@ -12,15 +15,16 @@ type ButtonVariant = "primary" | "ghost" | "danger";
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: "md" | "sm";
+  icon?: LucideIcon;
 }
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary: "bg-teal-mid text-white hover:bg-teal",
-  ghost: "bg-surface text-text border border-border hover:bg-gray-light",
+  ghost: "bg-surface text-text border border-border hover:bg-gray-light hover:border-border-strong",
   danger: "bg-red-light text-red border border-transparent hover:opacity-85",
 };
 
-export function Button({ variant = "ghost", size = "md", className, ...props }: ButtonProps) {
+export function Button({ variant = "ghost", size = "md", icon: Icon, className, children, ...props }: ButtonProps) {
   return (
     <button
       className={clsx(
@@ -30,7 +34,10 @@ export function Button({ variant = "ghost", size = "md", className, ...props }: 
         className,
       )}
       {...props}
-    />
+    >
+      {Icon && <Icon size={size === "md" ? 15 : 13} strokeWidth={2} />}
+      {children}
+    </button>
   );
 }
 
@@ -50,7 +57,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={clsx("inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-medium", className)}
+      className={clsx("inline-flex items-center rounded-full px-2 py-[3px] text-[11px] font-medium", className)}
       style={{ background: bg, color }}
     >
       {children}
@@ -61,10 +68,21 @@ export function Badge({
 export function Tag({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span
-      className={clsx("rounded-full px-2 py-1 text-[11px] font-medium bg-gray-light text-text-2", className)}
+      className={clsx("rounded-full px-2 py-[3px] text-[11px] font-medium bg-gray-light text-text-2", className)}
     >
       {children}
     </span>
+  );
+}
+
+/** Small 2-letter country chip, replaces flag emoji. */
+export function CountryBadge({ pais }: { pais: string | undefined }) {
+  const code = countryCode(pais);
+  const c = COUNTRY_BADGE_COLORS[code];
+  return (
+    <Badge bg={c.bg} color={c.c} className="font-semibold tracking-wide">
+      {code === "OTHER" ? "—" : code}
+    </Badge>
   );
 }
 
@@ -81,8 +99,8 @@ export function Avatar({
   size?: "md" | "lg" | "sm";
 }) {
   const c = avatarColor(idx);
-  const px = size === "lg" ? 52 : size === "sm" ? 24 : 42;
-  const fontSize = size === "lg" ? 16 : size === "sm" ? 10 : 13;
+  const px = size === "lg" ? 48 : size === "sm" ? 22 : 34;
+  const fontSize = size === "lg" ? 15 : size === "sm" ? 9 : 12;
   return (
     <div
       className="flex flex-shrink-0 items-center justify-center rounded-full font-semibold"
@@ -94,22 +112,31 @@ export function Avatar({
 }
 
 /* -------------------------------------------------------------------------- */
-/* Stars                                                                       */
+/* Stars (SVG rating)                                                          */
 /* -------------------------------------------------------------------------- */
-export function Stars({ n, size }: { n: number; size?: "sm" | "lg" }) {
+export function Stars({ n, size = 13 }: { n: number; size?: number }) {
   return (
-    <span className={clsx("text-[#EF9F27]", size === "lg" ? "text-[22px]" : "text-[13px]")}>{stars(n)}</span>
+    <span className="inline-flex items-center gap-[1px]" aria-label={`${n} de 5`}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <Star
+          key={i}
+          size={size}
+          strokeWidth={0}
+          fill={i <= n ? "#EF9F27" : "var(--border-strong)"}
+        />
+      ))}
+    </span>
   );
 }
 
 /* -------------------------------------------------------------------------- */
 /* Empty state                                                                 */
 /* -------------------------------------------------------------------------- */
-export function EmptyState({ icon = "🗂", title }: { icon?: string; title: string }) {
+export function EmptyState({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
   return (
-    <div className="col-span-full py-16 text-center text-text-2">
-      <div className="mb-2 text-4xl">{icon}</div>
-      <div>{title}</div>
+    <div className="col-span-full flex flex-col items-center gap-2 py-14 text-center text-text-2">
+      <Icon size={28} strokeWidth={1.5} className="text-text-3" />
+      <div className="text-[13px]">{title}</div>
     </div>
   );
 }
@@ -119,9 +146,9 @@ export function EmptyState({ icon = "🗂", title }: { icon?: string; title: str
 /* -------------------------------------------------------------------------- */
 export function StatCard({ n, label }: { n: ReactNode; label: string }) {
   return (
-    <div className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5">
-      <div className="text-[26px] font-semibold leading-none">{n}</div>
-      <div className="mt-1 text-xs text-text-2">{label}</div>
+    <div className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
+      <div className="text-2xl font-semibold leading-none tracking-tight">{n}</div>
+      <div className="mt-1 text-[11px] text-text-2">{label}</div>
     </div>
   );
 }
@@ -139,25 +166,18 @@ export function SearchInput({
   placeholder: string;
 }) {
   return (
-    <div className="relative min-w-[200px] flex-1">
-      <svg
-        className="pointer-events-none absolute left-[11px] top-1/2 -translate-y-1/2 text-text-3"
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-      >
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.35-4.35" />
-      </svg>
+    <div className="relative w-full max-w-[260px]">
+      <Search
+        size={13}
+        strokeWidth={2}
+        className="pointer-events-none absolute left-[9px] top-1/2 -translate-y-1/2 text-text-3"
+      />
       <input
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-[var(--radius-md)] border border-border bg-surface py-2 pl-9 pr-3 text-[13px] text-text outline-none transition-colors focus:border-teal-mid"
+        className="w-full rounded-[var(--radius-md)] border border-border bg-surface py-1.5 pl-[27px] pr-2.5 text-[13px] text-text outline-none transition-colors focus:border-teal-mid"
       />
     </div>
   );
@@ -182,7 +202,7 @@ export function ActiveFilters({
 }) {
   if (chips.length === 0) return null;
   return (
-    <div className="-mt-2 mb-4 flex flex-wrap items-center gap-1.5">
+    <div className="mb-4 flex flex-wrap items-center gap-1.5">
       <span className="mr-0.5 text-xs text-text-3">Filtros activos:</span>
       {chips.map((chip) => (
         <span
@@ -193,17 +213,17 @@ export function ActiveFilters({
           <button
             type="button"
             onClick={() => onRemove(chip.key)}
-            className="flex items-center rounded-full p-0.5 text-teal hover:bg-black/10"
+            className="flex cursor-pointer items-center rounded-full border-none bg-transparent p-0.5 text-teal hover:bg-black/10"
             aria-label={`Quitar filtro ${chip.label}`}
           >
-            ✕
+            <X size={12} strokeWidth={2.5} />
           </button>
         </span>
       ))}
       <button
         type="button"
         onClick={onClearAll}
-        className="cursor-pointer bg-transparent px-0.5 text-xs text-text-2 underline hover:text-text"
+        className="cursor-pointer border-none bg-transparent px-0.5 text-xs text-text-2 underline hover:text-text"
       >
         Limpiar todo
       </button>
@@ -220,17 +240,19 @@ export function TabsShell({ children }: { children: ReactNode }) {
 
 export function TabButton({
   active,
+  icon: Icon,
   children,
   ...props
-}: { active: boolean; children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) {
+}: { active: boolean; icon?: LucideIcon; children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       className={clsx(
-        "cursor-pointer rounded-lg border-none bg-transparent px-3.5 py-1.5 text-[13px] font-medium transition-colors",
-        active ? "bg-surface text-text shadow-sm" : "text-text-2",
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-transparent px-3.5 py-1.5 text-[13px] font-medium transition-colors",
+        active ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text",
       )}
       {...props}
     >
+      {Icon && <Icon size={14} strokeWidth={2} />}
       {children}
     </button>
   );

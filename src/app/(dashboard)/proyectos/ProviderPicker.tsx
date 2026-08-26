@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { Avatar } from "@/components/ui/primitives";
 import type { Provider } from "@/types/domain";
 
@@ -23,18 +24,7 @@ export function ProviderPicker({
   return (
     <div>
       <div className="relative mb-2">
-        <svg
-          className="pointer-events-none absolute left-[9px] top-1/2 -translate-y-1/2 text-text-3"
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
+        <Search size={14} strokeWidth={2} className="pointer-events-none absolute left-[9px] top-1/2 -translate-y-1/2 text-text-3" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}

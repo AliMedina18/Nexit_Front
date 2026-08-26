@@ -1,5 +1,6 @@
 "use client";
 
+import { Pencil, Trash2 } from "lucide-react";
 import { Avatar, Badge, Button, Stars } from "@/components/ui/primitives";
 import { Drawer, DrawerCloseButton, DrawerHeader, DrawerSection, KeyValue, NoteBox } from "@/components/ui/Drawer";
 import { BRIEF_STATUS_COLORS, PROJECT_STATUS_COLORS, PROVIDER_STATUS_COLORS } from "@/lib/constants";
@@ -92,11 +93,11 @@ export function ProjectDetail({
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-border p-4">
-        <Button variant="primary" onClick={onEdit}>
-          ✏️ Editar
+        <Button variant="primary" icon={Pencil} onClick={onEdit}>
+          Editar
         </Button>
-        <Button variant="danger" onClick={onDelete}>
-          🗑 Eliminar
+        <Button variant="danger" icon={Trash2} onClick={onDelete}>
+          Eliminar
         </Button>
       </div>
     </Drawer>

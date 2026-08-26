@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
+import { BarChart3, Bookmark, CalendarDays, Download, Minus, Printer, TrendingDown, TrendingUp } from "lucide-react";
 import { Badge, Button, TabButton, TabsShell } from "@/components/ui/primitives";
 import { PROJECT_STATUS_COLORS, BRIEF_STATUS_COLORS } from "@/lib/constants";
 import { downloadCSV, toCSV } from "@/lib/csv";
@@ -22,6 +23,7 @@ import type { Delta } from "@/lib/informe";
 
 function DeltaTag({ delta }: { delta: Delta | null }) {
   if (!delta) return null;
+  const Icon = delta.cls === "up" ? TrendingUp : delta.cls === "down" ? TrendingDown : Minus;
   return (
     <div
       className={clsx(
@@ -31,6 +33,7 @@ function DeltaTag({ delta }: { delta: Delta | null }) {
         delta.cls === "flat" && "text-text-3",
       )}
     >
+      <Icon size={12} strokeWidth={2.5} className="flex-shrink-0" />
       {delta.text}
     </div>
   );
@@ -85,7 +88,7 @@ export default function InformePage() {
 
   function handleSaveSnapshot() {
     saveSnapshot(mode, current);
-    pushToast(mode === "mensual" ? "Snapshot de este mes guardado" : "Snapshot de esta semana guardado", "📌");
+    pushToast(mode === "mensual" ? "Snapshot de este mes guardado" : "Snapshot de esta semana guardado", "success");
     forceRerender((n) => n + 1);
   }
 
@@ -95,7 +98,7 @@ export default function InformePage() {
 
   function exportInformeCSV() {
     const rows: (string | number)[][] = [
-      [`Informe ${mode} Nexus`, ""],
+      [`Informe ${mode} NEXIT`, ""],
       [mode === "mensual" ? "Mes" : "Semana", `${start.toISOString().slice(0, 10)} a ${end.toISOString().slice(0, 10)}`],
       ["", ""],
       ["Métrica", "Valor"],
@@ -119,8 +122,9 @@ export default function InformePage() {
     <div className="print-area">
       <div className="mb-4.5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold">
-            📊 Informe <span>{mode}</span> · {periodoLabel}
+          <h3 className="inline-flex items-center gap-1.5 text-base font-semibold">
+            <BarChart3 size={16} strokeWidth={2} />
+            Informe <span>{mode}</span> · {periodoLabel}
           </h3>
           <div className="text-xs text-text-2">{compLabel}</div>
         </div>
@@ -133,10 +137,14 @@ export default function InformePage() {
               Mensual
             </TabButton>
           </TabsShell>
-          <Button onClick={exportInformeCSV}>⬇ Exportar CSV</Button>
-          <Button onClick={() => window.print()}>🖨 Imprimir / PDF</Button>
-          <Button variant="primary" onClick={handleSaveSnapshot}>
-            📌 Guardar snapshot de {mode === "mensual" ? "este mes" : "esta semana"}
+          <Button icon={Download} onClick={exportInformeCSV}>
+            Exportar CSV
+          </Button>
+          <Button icon={Printer} onClick={() => window.print()}>
+            Imprimir / PDF
+          </Button>
+          <Button variant="primary" icon={Bookmark} onClick={handleSaveSnapshot}>
+            Guardar snapshot de {mode === "mensual" ? "este mes" : "esta semana"}
           </Button>
         </div>
       </div>
@@ -162,7 +170,11 @@ export default function InformePage() {
           sortedAll.map((p) => (
             <BreakdownRow key={p.id} onClick={() => openProject(p.id)}>
               <span className="flex-1 text-[13px]">
-                {p.nombre} <span className="text-text-3">· 📅 {p.fecha ? fmtDay(new Date(`${p.fecha}T00:00:00`)) : "sin fecha"}</span>
+                {p.nombre}{" "}
+                <span className="inline-flex items-center gap-1 text-text-3">
+                  · <CalendarDays size={11} strokeWidth={2} />
+                  {p.fecha ? fmtDay(new Date(`${p.fecha}T00:00:00`)) : "sin fecha"}
+                </span>
               </span>
               <Badge bg={PROJECT_STATUS_COLORS[p.estado].bg} color={PROJECT_STATUS_COLORS[p.estado].c}>
                 {p.estado}
@@ -202,7 +214,7 @@ export default function InformePage() {
           return (
             <BreakdownRow key={k}>
               <Badge bg={st.bg} color={st.c}>
-                📋 {k}
+                {k}
               </Badge>
               <span className="flex-1" />
               <span className="font-semibold">{cnt}</span>
@@ -222,8 +234,9 @@ export default function InformePage() {
         ) : (
           sortedRange.map((p) => (
             <BreakdownRow key={p.id} onClick={() => openProject(p.id)}>
-              <span className="flex-1 text-[13px]">
-                📅 {fmtDay(new Date(`${p.fecha}T00:00:00`))} · {p.nombre}{" "}
+              <span className="inline-flex flex-1 items-center gap-1 text-[13px]">
+                <CalendarDays size={11} strokeWidth={2} className="flex-shrink-0 text-text-3" />
+                {fmtDay(new Date(`${p.fecha}T00:00:00`))} · {p.nombre}{" "}
                 <span className="text-text-3">· {p.cliente || "—"}</span>
               </span>
               <Badge bg={PROJECT_STATUS_COLORS[p.estado].bg} color={PROJECT_STATUS_COLORS[p.estado].c}>

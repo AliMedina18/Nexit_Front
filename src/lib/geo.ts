@@ -199,22 +199,10 @@ export const GEO: Record<string, GeoNode> = {
   },
 };
 
-export const COUNTRY_FLAG: Record<string, string> = {
-  Colombia: "🇨🇴",
-  México: "🇲🇽",
-  "Estados Unidos": "🇺🇸",
-};
-
-export function countryFlag(pais: string | undefined): string {
-  if (!pais) return "🌐";
-  return COUNTRY_FLAG[pais] ?? "🌐";
-}
-
-export type CountryBadgeClass = "co" | "mx" | "us" | "other";
-
-export function countryBadgeClass(pais: string | undefined): CountryBadgeClass {
-  if (pais === "Colombia") return "co";
-  if (pais === "México") return "mx";
-  if (pais === "Estados Unidos") return "us";
-  return "other";
+/** 2-letter code used for the country badge chip (replaces flag emoji). */
+export function countryCode(pais: string | undefined): "CO" | "MX" | "US" | "OTHER" {
+  if (pais === "Colombia") return "CO";
+  if (pais === "México") return "MX";
+  if (pais === "Estados Unidos") return "US";
+  return "OTHER";
 }

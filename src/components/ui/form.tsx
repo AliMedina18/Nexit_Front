@@ -54,7 +54,7 @@ export function Row({ cols = 2, children }: { cols?: 2 | 3; children: ReactNode 
   );
 }
 
-export function FieldGroup({ title, children }: { title: string; children: ReactNode }) {
+export function FieldGroup({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <div className="mb-3.5 rounded-[var(--radius-md)] bg-gray-light p-3.5 pb-1">
       <div className="mb-2.5 text-[11px] font-semibold uppercase tracking-wide text-text-3">{title}</div>

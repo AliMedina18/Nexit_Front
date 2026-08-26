@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Check, MapPin } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/primitives";
 import { Field, FieldGroup, Input, Row, Select, Textarea } from "@/components/ui/form";
+import { StarRatingInput } from "@/components/ui/StarRating";
 import { citiesForRegion, regionLabel, regionsForCountry } from "@/lib/geo-helpers";
 import { GEO } from "@/lib/geo";
 import {
@@ -184,7 +186,7 @@ export function ProviderFormModal({
         />
       </Field>
 
-      <FieldGroup title="📍 Ubicación">
+      <FieldGroup title={<span className="inline-flex items-center gap-1.5"><MapPin size={12} strokeWidth={2} /> Ubicación</span>}>
         <Row cols={3}>
           <Field label="País" required error={errors.pais}>
             {!paisCustom ? (
@@ -195,7 +197,7 @@ export function ProviderFormModal({
                     {c}
                   </option>
                 ))}
-                <option value={OTRO}>✏️ Otro país…</option>
+                <option value={OTRO}>Otro país…</option>
               </Select>
             ) : (
               <>
@@ -206,7 +208,9 @@ export function ProviderFormModal({
                   placeholder="Escribe el nombre del país…"
                   className="border-teal-mid"
                 />
-                <div className="mt-1 text-[11px] text-teal">✓ Se guardará y aparecerá en los filtros</div>
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-teal">
+                  <Check size={12} strokeWidth={2.5} /> Se guardará y aparecerá en los filtros
+                </div>
               </>
             )}
           </Field>
@@ -224,7 +228,7 @@ export function ProviderFormModal({
                     {r}
                   </option>
                 ))}
-                <option value={OTRO}>✏️ Otro…</option>
+                <option value={OTRO}>Otro…</option>
               </Select>
             ) : (
               <>
@@ -235,7 +239,9 @@ export function ProviderFormModal({
                   placeholder="Escribe el departamento o estado…"
                   className="border-teal-mid"
                 />
-                <div className="mt-1 text-[11px] text-teal">✓ Se guardará y aparecerá en los filtros</div>
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-teal">
+                  <Check size={12} strokeWidth={2.5} /> Se guardará y aparecerá en los filtros
+                </div>
               </>
             )}
           </Field>
@@ -253,7 +259,7 @@ export function ProviderFormModal({
                     {c}
                   </option>
                 ))}
-                <option value={OTRO}>✏️ Otra…</option>
+                <option value={OTRO}>Otra…</option>
               </Select>
             ) : (
               <>
@@ -264,7 +270,9 @@ export function ProviderFormModal({
                   placeholder="Escribe la ciudad o municipio…"
                   className="border-teal-mid"
                 />
-                <div className="mt-1 text-[11px] text-teal">✓ Se guardará y aparecerá en los filtros</div>
+                <div className="mt-1 flex items-center gap-1 text-[11px] text-teal">
+                  <Check size={12} strokeWidth={2.5} /> Se guardará y aparecerá en los filtros
+                </div>
               </>
             )}
           </Field>
@@ -311,14 +319,8 @@ export function ProviderFormModal({
             placeholder="contacto@empresa.com"
           />
         </Field>
-        <Field label="Score (1–5)">
-          <Select value={form.score} onChange={(e) => set("score", Number(e.target.value))}>
-            <option value={5}>⭐⭐⭐⭐⭐ Excelente</option>
-            <option value={4}>⭐⭐⭐⭐ Muy bueno</option>
-            <option value={3}>⭐⭐⭐ Bueno</option>
-            <option value={2}>⭐⭐ Regular</option>
-            <option value={1}>⭐ Deficiente</option>
-          </Select>
+        <Field label="Score">
+          <StarRatingInput value={form.score} onChange={(n) => set("score", n)} />
         </Field>
       </Row>
 

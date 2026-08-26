@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
 export function Drawer({
   open,
@@ -45,10 +46,10 @@ export function DrawerCloseButton({ onClose }: { onClose: () => void }) {
     <button
       type="button"
       onClick={onClose}
-      className="ml-auto cursor-pointer rounded-md border-none bg-transparent p-0.5 text-xl leading-none text-text-2 hover:bg-gray-light"
+      className="ml-auto flex cursor-pointer items-center rounded-md border-none bg-transparent p-1 text-text-2 hover:bg-gray-light"
       aria-label="Cerrar"
     >
-      ✕
+      <X size={18} strokeWidth={2} />
     </button>
   );
 }

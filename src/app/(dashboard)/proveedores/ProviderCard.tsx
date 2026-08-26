@@ -1,8 +1,8 @@
 "use client";
 
-import { Avatar, Badge, Stars, Tag } from "@/components/ui/primitives";
+import { Paperclip } from "lucide-react";
+import { Avatar, Badge, CountryBadge, Stars, Tag } from "@/components/ui/primitives";
 import { PROVIDER_STATUS_COLORS } from "@/lib/constants";
-import { countryFlag } from "@/lib/geo";
 import type { Provider } from "@/types/domain";
 
 export function ProviderCard({
@@ -19,7 +19,7 @@ export function ProviderCard({
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean)
-    .slice(0, 2);
+    .slice(0, 1);
   const loc = [provider.region, provider.ciudad].filter(Boolean).join(" · ");
 
   return (
@@ -28,21 +28,20 @@ export function ProviderCard({
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())}
-      className="cursor-pointer rounded-[var(--radius-lg)] border border-border bg-surface p-4 transition-shadow hover:border-border-strong hover:shadow-md"
+      className="cursor-pointer rounded-[var(--radius-md)] border border-border bg-surface p-3 transition-shadow hover:border-border-strong hover:shadow-sm"
     >
-      <div className="flex items-start gap-3">
-        <Avatar nombre={provider.nombre} idx={idx} />
+      <div className="flex items-start gap-2.5">
+        <Avatar nombre={provider.nombre} idx={idx} size="sm" />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">{provider.nombre}</div>
-          <div className="mt-0.5 truncate text-xs text-text-2">
-            {countryFlag(provider.pais)} {loc || provider.pais}
+          <div className="truncate text-[13px] font-semibold leading-tight">{provider.nombre}</div>
+          <div className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-text-2">
+            <CountryBadge pais={provider.pais} />
+            <span className="truncate">{loc || provider.pais || "Sin ubicación"}</span>
           </div>
         </div>
-        <div className="ml-auto whitespace-nowrap">
-          <Stars n={provider.score} />
-        </div>
+        <Stars n={provider.score} size={11} />
       </div>
-      <div className="mt-2.5 flex flex-wrap gap-1.5">
+      <div className="mt-2 flex flex-wrap items-center gap-1">
         <Badge bg={sc.bg} color={sc.c}>
           {provider.status}
         </Badge>
@@ -51,9 +50,14 @@ export function ProviderCard({
           <Tag key={s}>{s}</Tag>
         ))}
       </div>
-      <div className="mt-2.5 flex flex-wrap gap-3.5 border-t border-border pt-2.5 text-xs text-text-2">
-        <span>{provider.contacto || "Sin contacto"}</span>
-        {provider.attachments.length > 0 && <span>📎 {provider.attachments.length}</span>}
+      <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-[11px] text-text-2">
+        <span className="truncate">{provider.contacto || "Sin contacto"}</span>
+        {provider.attachments.length > 0 && (
+          <span className="flex flex-shrink-0 items-center gap-0.5">
+            <Paperclip size={11} strokeWidth={2} />
+            {provider.attachments.length}
+          </span>
+        )}
       </div>
     </div>
   );

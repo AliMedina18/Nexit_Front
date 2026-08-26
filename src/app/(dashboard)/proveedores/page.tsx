@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Download, FolderOpen, Plus } from "lucide-react";
 import { ActiveFilters, Button, EmptyState, SearchInput, StatCard, type FilterChip } from "@/components/ui/primitives";
 import { Select } from "@/components/ui/form";
 import { downloadCSV, toCSV } from "@/lib/csv";
@@ -26,7 +27,6 @@ export default function ProveedoresPage() {
   const [filtRegion, setFiltRegion] = useState("");
   const [filtCiudad, setFiltCiudad] = useState("");
   const [filtCat, setFiltCat] = useState("");
-  const [filtRating, setFiltRating] = useState("");
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Provider | null>(null);
@@ -58,10 +58,9 @@ export default function ProveedoresPage() {
       const matchesRegion = !filtRegion || p.region === filtRegion;
       const matchesCiudad = !filtCiudad || p.ciudad === filtCiudad;
       const matchesCat = !filtCat || p.cat === filtCat;
-      const matchesRating = !filtRating || p.score >= Number(filtRating);
-      return matchesSearch && matchesPais && matchesRegion && matchesCiudad && matchesCat && matchesRating;
+      return matchesSearch && matchesPais && matchesRegion && matchesCiudad && matchesCat;
     });
-  }, [providers, search, filtPais, filtRegion, filtCiudad, filtCat, filtRating]);
+  }, [providers, search, filtPais, filtRegion, filtCiudad, filtCat]);
 
   const stats = useMemo(() => {
     const total = providers.length;
@@ -77,7 +76,6 @@ export default function ProveedoresPage() {
     filtRegion && { key: "region", label: filtRegion },
     filtCiudad && { key: "ciudad", label: filtCiudad },
     filtCat && { key: "cat", label: filtCat },
-    filtRating && { key: "rating", label: `${filtRating}+ ★` },
   ].filter(Boolean) as FilterChip[];
 
   function removeChip(key: string) {
@@ -93,7 +91,6 @@ export default function ProveedoresPage() {
     }
     if (key === "ciudad") setFiltCiudad("");
     if (key === "cat") setFiltCat("");
-    if (key === "rating") setFiltRating("");
   }
 
   function clearAll() {
@@ -102,16 +99,15 @@ export default function ProveedoresPage() {
     setFiltRegion("");
     setFiltCiudad("");
     setFiltCat("");
-    setFiltRating("");
   }
 
   async function handleSave(input: ProviderInput) {
     if (editing) {
       await updateProvider(editing.id, input);
-      pushToast("Proveedor actualizado", "✅");
+      pushToast("Proveedor actualizado", "success");
     } else {
       await addProvider(input);
-      pushToast("Proveedor agregado", "✅");
+      pushToast("Proveedor agregado", "success");
     }
     setFormOpen(false);
     setEditing(null);
@@ -121,7 +117,7 @@ export default function ProveedoresPage() {
     if (!window.confirm("¿Eliminar este proveedor? Esta acción no se puede deshacer.")) return;
     await removeProvider(id);
     setDetailId(null);
-    pushToast("Proveedor eliminado", "🗑");
+    pushToast("Proveedor eliminado", "success");
   }
 
   async function handleAttachmentsChange(provider: Provider, attachments: Attachment[]) {
@@ -176,8 +172,26 @@ export default function ProveedoresPage() {
         <StatCard n={stats.paisesCount} label="Países" />
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <SearchInput value={search} onChange={setSearch} placeholder="Buscar proveedor, servicio, ciudad…" />
+        <div className="ml-auto flex items-center gap-2">
+          <Button icon={Download} onClick={exportCSV}>
+            Exportar
+          </Button>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
+            Agregar
+          </Button>
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <Select
           value={filtPais}
           onChange={(e) => {
@@ -225,28 +239,13 @@ export default function ProveedoresPage() {
             </option>
           ))}
         </Select>
-        <Select value={filtRating} onChange={(e) => setFiltRating(e.target.value)} style={{ width: "auto" }}>
-          <option value="">Cualquier score</option>
-          <option value="4">4+ ★</option>
-          <option value="3">3+ ★</option>
-        </Select>
-        <Button onClick={exportCSV}>⬇ CSV</Button>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
-        >
-          + Agregar
-        </Button>
       </div>
 
       <ActiveFilters chips={chips} onRemove={removeChip} onClearAll={clearAll} />
 
-      <div className="grid grid-cols-1 gap-3 [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))]">
+      <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(250px,1fr))]">
         {filtered.length === 0 ? (
-          <EmptyState icon="🗂" title="No se encontraron proveedores con estos filtros." />
+          <EmptyState icon={FolderOpen} title="No se encontraron proveedores con estos filtros." />
         ) : (
           filtered.map((p) => (
             <ProviderCard

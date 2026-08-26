@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { Download, FolderKanban, Plus } from "lucide-react";
 import { ActiveFilters, Button, EmptyState, SearchInput, StatCard, type FilterChip } from "@/components/ui/primitives";
 import { Select } from "@/components/ui/form";
 import { downloadCSV, toCSV } from "@/lib/csv";
@@ -73,10 +74,10 @@ export default function ProyectosPage() {
   async function handleSave(input: ProjectInput) {
     if (editing) {
       await updateProject(editing.id, input);
-      pushToast("Proyecto actualizado", "✅");
+      pushToast("Proyecto actualizado", "success");
     } else {
       await addProject(input);
-      pushToast("Proyecto agregado", "✅");
+      pushToast("Proyecto agregado", "success");
     }
     setFormOpen(false);
     setEditing(null);
@@ -86,7 +87,7 @@ export default function ProyectosPage() {
     if (!window.confirm("¿Eliminar este proyecto? Esta acción no se puede deshacer.")) return;
     await removeProject(id);
     setDetailId(null);
-    pushToast("Proyecto eliminado", "🗑");
+    pushToast("Proyecto eliminado", "success");
   }
 
   function exportCSV() {
@@ -130,8 +131,26 @@ export default function ProyectosPage() {
         <StatCard n={stats.sinProveedores} label="Sin proveedores" />
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <SearchInput value={search} onChange={setSearch} placeholder="Buscar proyecto o cliente…" />
+        <div className="ml-auto flex items-center gap-2">
+          <Button icon={Download} onClick={exportCSV}>
+            Exportar
+          </Button>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onClick={() => {
+              setEditing(null);
+              setFormOpen(true);
+            }}
+          >
+            Agregar
+          </Button>
+        </div>
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <Select value={filtEstado} onChange={(e) => setFiltEstado(e.target.value)} style={{ width: "auto" }}>
           <option value="">Todos los estados</option>
           {PROJECT_STATUS_GROUPS.map((group) => (
@@ -142,23 +161,13 @@ export default function ProyectosPage() {
             </optgroup>
           ))}
         </Select>
-        <Button onClick={exportCSV}>⬇ CSV</Button>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
-        >
-          + Agregar
-        </Button>
       </div>
 
       <ActiveFilters chips={chips} onRemove={removeChip} onClearAll={clearAll} />
 
-      <div className="grid grid-cols-1 gap-3 [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))]">
+      <div className="grid gap-2.5 [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))]">
         {filtered.length === 0 ? (
-          <EmptyState icon="📁" title="No se encontraron proyectos con estos filtros." />
+          <EmptyState icon={FolderKanban} title="No se encontraron proyectos con estos filtros." />
         ) : (
           filtered.map((p) => (
             <ProjectCard key={p.id} project={p} providers={providers} onOpen={() => setDetailId(p.id)} />
