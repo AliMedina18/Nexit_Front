@@ -217,7 +217,7 @@ export default function ProveedoresPage() {
           type="button"
           onClick={() => setSoloMios((v) => !v)}
           aria-pressed={soloMios}
-          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors ${
+          className={`flex items-center gap-1.5 rounded-[var(--radius-md)] border px-3 py-1.5 text-[13px] font-medium transition-colors ${
             soloMios ? "border-text bg-text text-white" : "border-border bg-surface text-text hover:bg-gray-light"
           }`}
         >

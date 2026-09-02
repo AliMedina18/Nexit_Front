@@ -125,14 +125,14 @@ export default function CalendarioPage() {
           <button
             onClick={() => goToMonth(-1)}
             aria-label="Mes anterior"
-            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:bg-gray-light"
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-(--radius-md) border border-border bg-surface text-text-2 hover:bg-gray-light"
           >
             <ChevronLeft size={15} strokeWidth={2} />
           </button>
           <button
             onClick={() => goToMonth(1)}
             aria-label="Mes siguiente"
-            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:bg-gray-light"
+            className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-(--radius-md) border border-border bg-surface text-text-2 hover:bg-gray-light"
           >
             <ChevronRight size={15} strokeWidth={2} />
           </button>
@@ -146,7 +146,7 @@ export default function CalendarioPage() {
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {sinProveedor > 0 && (
-            <span className="rounded-full bg-red-light px-2 py-0.5 text-[11px] font-medium text-red">
+            <span className="rounded-(--radius-md) bg-red-light px-2 py-0.5 text-[11px] font-medium text-red">
               {sinProveedor} sin proveedor
             </span>
           )}
@@ -188,7 +188,7 @@ export default function CalendarioPage() {
       />
 
       {projectsError && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-[var(--radius-md)] bg-red-light px-3.5 py-2.5 text-[13px] text-red">
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-(--radius-md) bg-red-light px-3.5 py-2.5 text-[13px] text-red">
           <span>{projectsError}</span>
           <Button size="sm" onClick={fetchAll}>
             Reintentar
