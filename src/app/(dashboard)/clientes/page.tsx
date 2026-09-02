@@ -8,6 +8,7 @@ import { Select } from "@/components/ui/form";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/auth-store";
 import { useClientesStore } from "@/store/clientes-store";
+import { useProjectsStore } from "@/store/projects-store";
 import { usePageToolbarStore } from "@/store/page-toolbar-store";
 import { useUiStore } from "@/store/ui-store";
 import { clientesApi } from "@/services/api/clientes-service";
@@ -19,6 +20,7 @@ import styles from "@/styles/dashboard.module.css";
 
 export default function ClientesPage() {
   const { items: clientes, loading, error, fetchAll, refresh, addCliente, updateCliente, removeCliente } = useClientesStore();
+  const { items: projects, fetchAll: fetchProjects } = useProjectsStore();
   const pushToast = useUiStore((s) => s.pushToast);
   const authUser = useAuthStore((s) => s.user);
   const esAdmin = authUser?.rol === "admin" || authUser?.rol === "super_admin";
@@ -27,9 +29,11 @@ export default function ClientesPage() {
 
   useEffect(() => {
     fetchAll();
-  }, [fetchAll]);
+    fetchProjects();
+  }, [fetchAll, fetchProjects]);
 
   const [search, setSearch] = useState("");
+  const [filtEstado, setFiltEstado] = useState("");
   const [filtSector, setFiltSector] = useState("");
   const [view, setView] = useState<"cards" | "table">("cards");
 
@@ -76,33 +80,35 @@ export default function ClientesPage() {
           v?.toLowerCase().includes(s),
         );
       const matchesSector = !filtSector || c.sector === filtSector;
-      return matchesSearch && matchesSector;
+      const tieneProyecto = projects.some((project) => project.clienteId === c.id);
+      const matchesEstado = !filtEstado || (filtEstado === "activo" ? tieneProyecto : !tieneProyecto);
+      return matchesSearch && matchesSector && matchesEstado;
     });
-  }, [clientes, search, filtSector]);
+  }, [clientes, projects, search, filtEstado, filtSector]);
 
   const stats = useMemo(() => {
     const total = clientes.length;
-    const sectoresCount = sectores.length;
-    const conWeb = clientes.filter((c) => c.web).length;
-    const inicioMes = new Date();
-    inicioMes.setDate(1);
-    inicioMes.setHours(0, 0, 0, 0);
-    const nuevosEsteMes = clientes.filter((c) => new Date(c.createdAt) >= inicioMes).length;
-    return { total, sectoresCount, conWeb, nuevosEsteMes };
-  }, [clientes, sectores]);
+    const activos = projects.filter((project) => project.clienteId).length;
+    const prospectos = clientes.filter((cliente) => !projects.some((project) => project.clienteId === cliente.id)).length;
+    const conProyectoActivo = new Set(projects.map((project) => project.clienteId).filter(Boolean)).size;
+    return { total, activos, prospectos, conProyectoActivo };
+  }, [clientes, projects]);
 
   const chips: FilterChip[] = [
     search && { key: "search", label: `“${search}”` },
+    filtEstado && { key: "estado", label: filtEstado === "activo" ? "Activos" : "Prospectos" },
     filtSector && { key: "sector", label: filtSector },
   ].filter(Boolean) as FilterChip[];
 
   function removeChip(key: string) {
     if (key === "search") setSearch("");
+    if (key === "estado") setFiltEstado("");
     if (key === "sector") setFiltSector("");
   }
 
   function clearAll() {
     setSearch("");
+    setFiltEstado("");
     setFiltSector("");
   }
 
@@ -148,9 +154,9 @@ export default function ClientesPage() {
 
       <div className={`mb-5 ${styles.kpis}`}>
         <StatCard n={stats.total} label="Total de clientes" />
-        <StatCard n={stats.sectoresCount} label="Sectores" />
-        <StatCard n={stats.conWeb} label="Con sitio web" />
-        <StatCard n={stats.nuevosEsteMes} label="Nuevos este mes" />
+        <StatCard n={stats.activos} label="Activos" />
+        <StatCard n={stats.prospectos} label="Prospectos" />
+        <StatCard n={stats.conProyectoActivo} label="Con proyecto activo" />
       </div>
 
       {/* Mismas acciones que la barra superior ("Excel" / "Nuevo cliente"),
@@ -178,7 +184,12 @@ export default function ClientesPage() {
         </Button>
       </div>
 
-      <div className={`mb-4 ${styles.filters}`}>
+      <div className={`mb-4 rounded-(--radius-md) border border-border bg-surface p-4 ${styles.filters2}`}>
+        <Select value={filtEstado} onChange={(e) => setFiltEstado(e.target.value)}>
+          <option value="">Cualquier estado</option>
+          <option value="activo">Activos</option>
+          <option value="prospecto">Prospectos</option>
+        </Select>
         <Select value={filtSector} onChange={(e) => setFiltSector(e.target.value)}>
           <option value="">Toda industria</option>
           {sectores.map((s) => (
@@ -232,7 +243,7 @@ export default function ClientesPage() {
           </table>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 min-[760px]:grid-cols-2">
           {filtered.map((c) => (
             <ClienteCard key={c.id} cliente={c} onOpen={() => setDetailId(c.id)} />
           ))}
