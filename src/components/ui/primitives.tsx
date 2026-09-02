@@ -60,7 +60,7 @@ export function Badge({
 }) {
   return (
     <span
-      className={clsx("inline-flex items-center rounded-full px-2 py-[3px] text-[11px] font-medium", className)}
+      className={clsx("inline-flex items-center rounded-[var(--radius-md)] px-2 py-[3px] text-[11px] font-medium", className)}
       style={{ background: bg, color }}
     >
       {children}
@@ -71,7 +71,7 @@ export function Badge({
 export function Tag({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <span
-      className={clsx("rounded-full px-2 py-[3px] text-[11px] font-medium bg-gray-light text-text-2", className)}
+      className={clsx("rounded-[var(--radius-md)] px-2 py-[3px] text-[11px] font-medium bg-gray-light text-text-2", className)}
     >
       {children}
     </span>
@@ -281,13 +281,13 @@ export function ActiveFilters({
       {chips.map((chip) => (
         <span
           key={chip.key}
-          className="inline-flex items-center gap-1 rounded-full bg-teal-light py-1 pl-2.5 pr-1 text-xs font-medium text-teal"
+          className="inline-flex items-center gap-1 rounded-[var(--radius-md)] bg-teal-light py-1 pl-2.5 pr-1 text-xs font-medium text-teal"
         >
           {chip.label}
           <button
             type="button"
             onClick={() => onRemove(chip.key)}
-            className="flex cursor-pointer items-center rounded-full border-none bg-transparent p-0.5 text-teal hover:bg-black/10"
+            className="flex cursor-pointer items-center rounded-[var(--radius-md)] border-none bg-transparent p-0.5 text-teal hover:bg-black/10"
             aria-label={`Quitar filtro ${chip.label}`}
           >
             <X size={12} strokeWidth={2.5} />

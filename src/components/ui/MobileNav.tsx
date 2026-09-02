@@ -31,7 +31,11 @@ export function MobileNav() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    // Portal only mounts on the client to avoid rendering document on SSR.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!moreOpen) return;

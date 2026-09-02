@@ -106,6 +106,20 @@ body {
   line-height: 1.5;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+}
+
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
