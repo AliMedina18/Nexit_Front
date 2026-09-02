@@ -1,7 +1,7 @@
 "use client";
 
-import { Mail, MapPin, Pencil } from "lucide-react";
-import { Avatar, Tag } from "@/components/ui/primitives";
+import { MapPin, Pencil } from "lucide-react";
+import { Avatar, Badge, Tag } from "@/components/ui/primitives";
 import type { Cliente } from "@/types/api";
 
 export function ClienteCard({ cliente, onOpen }: { cliente: Cliente; onOpen: () => void }) {
@@ -28,15 +28,13 @@ export function ClienteCard({ cliente, onOpen }: { cliente: Cliente; onOpen: () 
         </div>
       )}
 
-      {cliente.email && (
-        <div className="mt-1 flex items-center gap-1 truncate text-[11px] text-text-2">
-          <Mail size={11} strokeWidth={2} className="flex-shrink-0 text-text-3" />
-          <span className="truncate">{cliente.email}</span>
-        </div>
-      )}
-
       <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-[11px] text-text-2">
-        <span className="truncate">{cliente.contacto || "Sin contacto"}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <Badge bg="var(--success-light)" color="var(--success)">
+            Activo
+          </Badge>
+          <span className="truncate">{cliente.contacto || "Sin contacto"}</span>
+        </div>
         <div className="flex items-center gap-2">
           {cliente.contacto && cliente.cargoContacto && <Tag>{cliente.cargoContacto}</Tag>}
           <button

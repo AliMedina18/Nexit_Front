@@ -184,13 +184,13 @@ export default function ClientesPage() {
         </Button>
       </div>
 
-      <div className={`mb-4 rounded-(--radius-md) border border-border bg-surface p-4 ${styles.filters2}`}>
-        <Select value={filtEstado} onChange={(e) => setFiltEstado(e.target.value)}>
+      <div className={`mb-6 rounded-(--radius-md) border border-border bg-surface p-4 ${styles.filters2}`}>
+        <Select className="h-[52px] bg-bg" value={filtEstado} onChange={(e) => setFiltEstado(e.target.value)}>
           <option value="">Cualquier estado</option>
           <option value="activo">Activos</option>
           <option value="prospecto">Prospectos</option>
         </Select>
-        <Select value={filtSector} onChange={(e) => setFiltSector(e.target.value)}>
+        <Select className="h-[52px] bg-bg" value={filtSector} onChange={(e) => setFiltSector(e.target.value)}>
           <option value="">Toda industria</option>
           {sectores.map((s) => (
             <option key={s} value={s}>

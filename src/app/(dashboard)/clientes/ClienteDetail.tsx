@@ -3,7 +3,7 @@
 import { ExternalLink, Pencil } from "lucide-react";
 import { Avatar, Button } from "@/components/ui/primitives";
 import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
-import { Drawer, DrawerCloseButton, DrawerHeader, DrawerSection, KeyValue, NoteBox } from "@/components/ui/Drawer";
+import { Drawer, DrawerBox, DrawerCloseButton, DrawerHeader, DrawerSection, KeyValue, NoteBox } from "@/components/ui/Drawer";
 import { useUiStore } from "@/store/ui-store";
 import { toSafeHref } from "@/lib/url-safety";
 import type { Cliente } from "@/types/api";
@@ -42,12 +42,12 @@ export function ClienteDetail({
       </DrawerHeader>
 
       <div className="flex-1 p-5">
-        <DrawerSection title="Ubicación" />
-        <KeyValue k="Ciudad" v={cliente.ciudad || "—"} />
-        <KeyValue k="Dirección" v={cliente.direccion || "—"} />
-        <KeyValue
-          k="Sitio web"
-          v={
+        <DrawerBox title="Ubicación">
+          <KeyValue k="Ciudad" v={cliente.ciudad || "—"} />
+          <KeyValue k="Dirección" v={cliente.direccion || "—"} />
+          <KeyValue
+            k="Sitio web"
+            v={
             cliente.web ? (
               (() => {
                 const href = toSafeHref(cliente.web);
@@ -70,10 +70,11 @@ export function ClienteDetail({
             ) : (
               "—"
             )
-          }
-        />
+            }
+          />
+        </DrawerBox>
 
-        <DrawerSection
+        <DrawerBox
           title="Contacto"
           action={
             <button
@@ -83,20 +84,22 @@ export function ClienteDetail({
               Copiar
             </button>
           }
-        />
-        <KeyValue k="Contacto" v={cliente.contacto || "—"} />
-        <KeyValue k="Cargo" v={cliente.cargoContacto || "—"} />
-        <KeyValue k="Email" v={cliente.email || "—"} />
-        {cliente.telefonos.length > 0 ? (
-          cliente.telefonos.map((t, i) => (
-            <KeyValue key={t.id ?? i} k={t.etiqueta || "Teléfono"} v={t.telefono} />
-          ))
-        ) : (
-          <KeyValue k="Teléfono" v="—" />
-        )}
+        >
+          <KeyValue k="Contacto" v={cliente.contacto || "—"} />
+          <KeyValue k="Cargo" v={cliente.cargoContacto || "—"} />
+          <KeyValue k="Email" v={cliente.email || "—"} />
+          {cliente.telefonos.length > 0 ? (
+            cliente.telefonos.map((t, i) => (
+              <KeyValue key={t.id ?? i} k={t.etiqueta || "Teléfono"} v={t.telefono} />
+            ))
+          ) : (
+            <KeyValue k="Teléfono" v="—" />
+          )}
+        </DrawerBox>
 
-        <DrawerSection title="Facturación" />
-        <KeyValue k="Valor de referencia" v={cliente.valorReferencia || "—"} />
+        <DrawerBox title="Facturación">
+          <KeyValue k="Valor de referencia" v={cliente.valorReferencia || "—"} />
+        </DrawerBox>
 
         {cliente.notas && (
           <>
@@ -104,6 +107,9 @@ export function ClienteDetail({
             <NoteBox>{cliente.notas}</NoteBox>
           </>
         )}
+
+        <DrawerSection title="Archivos y enlaces" />
+        <NoteBox>Sin archivos ni enlaces registrados.</NoteBox>
       </div>
 
       <div className="flex flex-wrap gap-2 border-t border-border p-4">
