@@ -258,6 +258,8 @@ export default function ClientesPage() {
         }}
         onSave={handleSave}
         editing={editing}
+        puedeImportar={esAdmin}
+        onImported={refresh}
       />
 
       <ClienteDetail

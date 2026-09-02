@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Plus, Upload, X } from "lucide-react";
 import { Drawer, DrawerCloseButton } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/primitives";
 import { Field, FormSection, Input, Row, Textarea } from "@/components/ui/form";
 import type { Cliente, ClienteInput, ClienteTelefono } from "@/types/api";
+import { clientesApi } from "@/services/api/clientes-service";
+import { useUiStore } from "@/store/ui-store";
 
 interface FormState {
   nombre: string;
@@ -40,14 +42,21 @@ export function ClienteFormModal({
   onClose,
   onSave,
   editing,
+  puedeImportar = false,
+  onImported,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (input: ClienteInput) => void;
   editing: Cliente | null;
+  puedeImportar?: boolean;
+  onImported?: () => void;
 }) {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [importing, setImporting] = useState(false);
+  const importRef = useRef<HTMLInputElement>(null);
+  const pushToast = useUiStore((s) => s.pushToast);
 
   useEffect(() => {
     if (!open) return;
@@ -116,6 +125,25 @@ export function ClienteFormModal({
     onSave(input);
   }
 
+  async function handleImport(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    try {
+      const result = await clientesApi.importar(file);
+      if (result.creados > 0) onImported?.();
+      pushToast(
+        result.creados > 0 ? `${result.creados} clientes importados` : "No se creó ningún cliente",
+        result.creados > 0 ? "success" : "danger",
+      );
+    } catch (error) {
+      pushToast(error instanceof Error ? error.message : "No se pudo importar el archivo", "danger");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <Drawer open={open} onClose={onClose}>
       <div className="sticky top-0 z-[1] flex items-start justify-between gap-3.5 border-b border-border bg-surface p-5">
@@ -127,7 +155,17 @@ export function ClienteFormModal({
             {editing ? "Editar datos del cliente" : "Datos del nuevo cliente"}
           </h2>
         </div>
-        <DrawerCloseButton onClose={onClose} />
+        <div className="ml-auto flex items-center gap-2">
+          {puedeImportar && (
+            <>
+              <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
+              <Button size="sm" icon={Upload} disabled={importing} onClick={() => importRef.current?.click()}>
+                {importing ? "Importando…" : "Importar datos"}
+              </Button>
+            </>
+          )}
+          <DrawerCloseButton onClose={onClose} />
+        </div>
       </div>
 
       <div className="flex-1 p-5">
