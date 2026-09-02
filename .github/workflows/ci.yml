@@ -1,0 +1,61 @@
+name: CI
+
+# Corre en cada push/PR a main: lint, tipos, auditoría de dependencias,
+# pruebas unitarias, build de producción y pruebas de extremo a extremo
+# (docs/32) -- todo lo que hasta ahora se verificaba a mano antes de dar por
+# buena una entrega, para que ningún cambio que rompa algo (o abra un hueco
+# de seguridad) llegue a main sin que alguien lo note primero.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:5031
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tipos (tsc)
+        run: npx tsc --noEmit
+
+      - name: Auditoría de dependencias (falla solo en vulnerabilidades altas/críticas)
+        run: npm audit --audit-level=high
+
+      - name: Pruebas unitarias (Vitest)
+        run: npm test
+
+      - name: Build de producción
+        run: npm run build
+
+      - name: Instalar navegador de Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Pruebas de extremo a extremo (Playwright)
+        run: npm run test:e2e
+
+      - name: Subir reporte de Playwright si algo falló
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

@@ -1,9 +1,10 @@
 "use client";
 
 import { CheckCircle2, Clock, XCircle } from "lucide-react";
-import type { Project } from "@/types/domain";
+import type { Proyecto } from "@/types/api";
 
 const WEEKDAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+const EJECUTADO_NOMBRES = ["Finalizado", "Ejecutado, pendiente facturar", "Facturado"];
 
 interface DayCell {
   date: Date;
@@ -31,22 +32,25 @@ export function CalendarGrid({
   year,
   monthIndex,
   projects,
+  estadoNombrePorId,
   today,
   onOpen,
 }: {
   year: number;
   monthIndex: number;
-  projects: Project[];
+  projects: Proyecto[];
+  estadoNombrePorId: Record<string, string>;
   today: string;
-  onOpen: (id: number) => void;
+  onOpen: (id: string) => void;
 }) {
   const cells = buildMonthMatrix(year, monthIndex, today);
-  const byDay = new Map<string, Project[]>();
+  const byDay = new Map<string, Proyecto[]>();
   projects.forEach((p) => {
-    if (!p.fecha) return;
-    const list = byDay.get(p.fecha) ?? [];
+    const fecha = p.fechaEvento?.slice(0, 10);
+    if (!fecha) return;
+    const list = byDay.get(fecha) ?? [];
     list.push(p);
-    byDay.set(p.fecha, list);
+    byDay.set(fecha, list);
   });
 
   return (
@@ -78,12 +82,11 @@ export function CalendarGrid({
               </span>
               <div className="flex flex-col gap-1">
                 {dayProjects.map((p) => {
-                  const ejecutado =
-                    ["Finalizado", "Ejecutado, pendiente facturar", "Facturado"].includes(p.estado) ||
-                    (p.fecha < today && p.estado !== "Cancelado");
-                  const StatusIcon = p.estado === "Cancelado" ? XCircle : ejecutado ? CheckCircle2 : Clock;
-                  const statusColor =
-                    p.estado === "Cancelado" ? "var(--red)" : ejecutado ? "var(--teal-mid)" : "var(--text-3)";
+                  const estadoNombre = estadoNombrePorId[p.estadoId] ?? "";
+                  const fecha = p.fechaEvento?.slice(0, 10) ?? "";
+                  const ejecutado = EJECUTADO_NOMBRES.includes(estadoNombre) || (fecha < today && estadoNombre !== "Cancelado");
+                  const StatusIcon = estadoNombre === "Cancelado" ? XCircle : ejecutado ? CheckCircle2 : Clock;
+                  const statusColor = estadoNombre === "Cancelado" ? "var(--red)" : ejecutado ? "var(--teal-mid)" : "var(--text-3)";
                   return (
                     <button
                       key={p.id}

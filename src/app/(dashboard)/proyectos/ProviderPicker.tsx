@@ -3,23 +3,28 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Avatar } from "@/components/ui/primitives";
-import type { Provider } from "@/types/domain";
+import { useCatalogosStore } from "@/store/catalogos-store";
+import type { Proveedor } from "@/types/api";
 
 export function ProviderPicker({
   providers,
   selectedIds,
   onToggle,
 }: {
-  providers: Provider[];
-  selectedIds: Set<number>;
-  onToggle: (id: number) => void;
+  providers: Proveedor[];
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
 }) {
+  const { categoriasProveedor } = useCatalogosStore();
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
-    return providers.filter((p) => !s || [p.nombre, p.cat].some((v) => v?.toLowerCase().includes(s)));
-  }, [providers, search]);
+    return providers.filter((p) => {
+      const cat = categoriasProveedor.find((c) => c.id === p.categoriaId)?.nombre ?? "";
+      return !s || [p.nombre, cat].some((v) => v?.toLowerCase().includes(s));
+    });
+  }, [providers, search, categoriasProveedor]);
 
   return (
     <div>
@@ -29,7 +34,7 @@ export function ProviderPicker({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar proveedor por nombre o categoría…"
-          className="w-full rounded-[var(--radius-md)] border border-border bg-bg py-1.5 pl-[30px] pr-2.5 text-[13px] outline-none focus:border-teal-mid"
+          className="w-full rounded-[var(--radius-md)] border border-border bg-surface py-1.5 pl-[30px] pr-2.5 text-[13px] outline-none focus:border-teal-mid"
         />
       </div>
       <div className="mb-1.5 text-xs text-text-2">{selectedIds.size} proveedores seleccionados</div>
@@ -38,8 +43,8 @@ export function ProviderPicker({
           <div className="py-3.5 text-center text-xs text-text-3">No se encontraron proveedores</div>
         )}
         {filtered.map((p) => {
-          const idx = providers.indexOf(p);
           const checked = selectedIds.has(p.id);
+          const cat = categoriasProveedor.find((c) => c.id === p.categoriaId)?.nombre ?? "";
           return (
             <label
               key={p.id}
@@ -51,10 +56,10 @@ export function ProviderPicker({
                 onChange={() => onToggle(p.id)}
                 className="h-[15px] w-[15px] flex-shrink-0 cursor-pointer accent-teal-mid"
               />
-              <Avatar nombre={p.nombre} idx={idx} size="sm" />
+              <Avatar nombre={p.nombre} size="sm" />
               <div className="min-w-0">
                 <div className="truncate text-[13px] font-medium">{p.nombre}</div>
-                <div className="truncate text-[11px] text-text-2">{p.cat}</div>
+                <div className="truncate text-[11px] text-text-2">{cat}</div>
               </div>
             </label>
           );

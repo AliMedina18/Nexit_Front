@@ -3,7 +3,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import clsx from "clsx";
 import { Search, Star, X, type LucideIcon } from "lucide-react";
-import { avatarColor, initials } from "@/lib/format";
+import { initials } from "@/lib/format";
 import { COUNTRY_BADGE_COLORS } from "@/lib/constants";
 import { countryCode } from "@/lib/geo";
 
@@ -18,17 +18,20 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   icon?: LucideIcon;
 }
 
+/** :active (al presionar) agregado 2026-09-01 -- antes solo había :hover, sin
+ * ningún cambio visual al hacer clic/tap (pedido explícito: "el cambio de
+ * color en los botones al presionarlos"). */
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: "bg-teal-mid text-white hover:bg-teal",
-  ghost: "bg-surface text-text border border-border hover:bg-gray-light hover:border-border-strong",
-  danger: "bg-red-light text-red border border-transparent hover:opacity-85",
+  primary: "bg-teal-mid text-white hover:bg-teal active:bg-black",
+  ghost: "bg-surface text-text border border-border hover:bg-gray-light hover:border-border-strong active:bg-border",
+  danger: "bg-red-light text-red border border-transparent hover:opacity-85 active:opacity-70",
 };
 
 export function Button({ variant = "ghost", size = "md", icon: Icon, className, children, ...props }: ButtonProps) {
   return (
     <button
       className={clsx(
-        "inline-flex items-center gap-1.5 rounded-[var(--radius-md)] font-medium transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-60",
+        "inline-flex items-center gap-1.5 rounded-[var(--radius-md)] font-medium transition-all duration-150 active:scale-[0.98] cursor-pointer disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
         size === "md" ? "px-3.5 py-2 text-[13px]" : "px-2.5 py-1.5 text-xs",
         VARIANT_CLASSES[variant],
         className,
@@ -89,22 +92,26 @@ export function CountryBadge({ pais }: { pais: string | undefined }) {
 /* -------------------------------------------------------------------------- */
 /* Avatar                                                                      */
 /* -------------------------------------------------------------------------- */
+/**
+ * Avatar de entidad (cliente/proveedor/proyecto): cuadrado negro con texto
+ * verde -- ported 2026-08-28 del mockup aprobado (antes era un círculo con
+ * paleta rotativa de 8 colores vía avatarColor(idx)). `idx` se deja opcional
+ * y sin uso solo para no tocar los 6 call sites existentes que aún lo pasan.
+ */
 export function Avatar({
   nombre,
-  idx,
   size = "md",
 }: {
   nombre: string;
-  idx: number;
+  idx?: number;
   size?: "md" | "lg" | "sm";
 }) {
-  const c = avatarColor(idx);
   const px = size === "lg" ? 48 : size === "sm" ? 22 : 34;
-  const fontSize = size === "lg" ? 15 : size === "sm" ? 9 : 12;
+  const fontSize = size === "lg" ? 16 : size === "sm" ? 9 : 12;
   return (
     <div
-      className="flex flex-shrink-0 items-center justify-center rounded-full font-semibold"
-      style={{ background: c.bg, color: c.text, width: px, height: px, fontSize }}
+      className="flex flex-shrink-0 items-center justify-center rounded-[3px] bg-text font-semibold text-green"
+      style={{ width: px, height: px, fontSize }}
     >
       {initials(nombre)}
     </div>
@@ -132,11 +139,37 @@ export function Stars({ n, size = 13 }: { n: number; size?: number }) {
 /* -------------------------------------------------------------------------- */
 /* Empty state                                                                 */
 /* -------------------------------------------------------------------------- */
-export function EmptyState({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+/**
+ * `tone: "danger"` + `action` cubre el caso de que la carga inicial haya
+ * fallado (ver el campo `error` de los stores de clientes/proveedores/
+ * proyectos): mismo layout que el vacío normal, ícono y texto en rojo, y un
+ * botón para reintentar en vez de dejar a la persona sin salida.
+ */
+export function EmptyState({
+  icon: Icon,
+  title,
+  tone = "neutral",
+  action,
+}: {
+  icon: LucideIcon;
+  title: string;
+  tone?: "neutral" | "danger";
+  action?: { label: string; onClick: () => void };
+}) {
   return (
-    <div className="col-span-full flex flex-col items-center gap-2 py-14 text-center text-text-2">
-      <Icon size={28} strokeWidth={1.5} className="text-text-3" />
+    <div
+      className={clsx(
+        "col-span-full flex flex-col items-center gap-2 py-14 text-center",
+        tone === "danger" ? "text-red" : "text-text-2",
+      )}
+    >
+      <Icon size={28} strokeWidth={1.5} className={tone === "danger" ? "text-red" : "text-text-3"} />
       <div className="text-[13px]">{title}</div>
+      {action && (
+        <Button variant="ghost" size="sm" className="mt-1" onClick={action.onClick}>
+          {action.label}
+        </Button>
+      )}
     </div>
   );
 }

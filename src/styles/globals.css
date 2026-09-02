@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Design tokens
+   Ported 2026-08-28 from the approved Claude Diseño mockup ("Nexit Standalone").
+   Values below are not approximations -- they were extracted directly from the
+   mockup via getComputedStyle() (Playwright) and from its embedded color
+   constants (CLI_STATUS_COLORS / PROJ_STATUS_COLORS / BRIEF_STATUS_COLORS).
+   Warm off-white paper background, near-black ink, tight 3-4px radii,
+   Archivo (headings/body) + IBM Plex Mono (labels/eyebrows/mono data).
+   The `--teal-*` variable names are kept as-is on purpose (9 files already
+   reference bg-teal-mid / text-teal-mid / etc.) -- only their VALUES change
+   here, from the old green/teal brand to the mockup's black-primary system.
+   Renaming them to something like --ink-* is tracked separately (component
+   pass) so this token swap alone doesn't touch call sites.
+   ========================================================================== */
+:root {
+  --bg: #f4f3ef;
+  --surface: #ffffff;
+  --border: #e3e1da;
+  --border-strong: #c9c6be;
+  --text: #0c0c0c;
+  --text-2: #444441;
+  --text-3: #6e6b63;
+
+  /* Brand green -- sampled straight from the next! logo. Decorative only
+     (icons, focus rings, chart accents, the NEXIT wordmark accent). Do not
+     use for body text or as a button fill with white text (fails contrast). */
+  --green: #00f675;
+
+  /* Primary action color. In the mockup, primary buttons/active nav state
+     are near-black (not green/teal) -- #0c0c0c fill, white text, 3px radius. */
+  --teal-mid: #0c0c0c; /* primary buttons, links, active state */
+  --teal: #262626; /* hover/pressed state -- slightly lighter than the base fill so hover is visible */
+  --teal-light: #efede7; /* tint for badges, subtle highlights */
+
+  --blue: #1e5aa8;
+  --blue-light: #e6f1fb;
+
+  --red: #8a2525;
+  --red-light: #fcebeb;
+
+  --amber: #7a4e00;
+  --amber-light: #fbf0dc;
+
+  /* Success (positive status, e.g. "Activo") -- separate from the decorative
+     logo green. Matches the mockup's CLI_STATUS_COLORS / PROJ_STATUS_COLORS. */
+  --success: #036b3c;
+  --success-light: #e4f9ee;
+
+  --gray-light: #f1efe8;
+  --radius: 3px;
+  --radius-lg: 4px;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-text-3: var(--text-3);
+
+  --color-green: var(--green);
+  --color-teal: var(--teal);
+  --color-teal-light: var(--teal-light);
+  --color-teal-mid: var(--teal-mid);
+
+  --color-blue: var(--blue);
+  --color-blue-light: var(--blue-light);
+
+  --color-red: var(--red);
+  --color-red-light: var(--red-light);
+
+  --color-amber: var(--amber);
+  --color-amber-light: var(--amber-light);
+
+  --color-success: var(--success);
+  --color-success-light: var(--success-light);
+
+  --color-gray-light: var(--gray-light);
+
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius-lg);
+
+  --font-sans: var(--font-archivo), Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--teal-mid);
+  outline-offset: 1px;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 20px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+}

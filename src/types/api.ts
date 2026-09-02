@@ -441,3 +441,11 @@ export interface PresenciaUsuario {
   enLinea: boolean;
   ultimaActividad?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Estado de cuenta (login: detección "primera vez" vs. "recurrente", docs/30)
+// ---------------------------------------------------------------------------
+
+export interface EstadoCuentaResponse {
+  tieneContrasena: boolean;
+}

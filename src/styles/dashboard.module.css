@@ -1,0 +1,71 @@
+/**
+ * Patrones compartidos por las vistas del dashboard (Clientes, Proyectos,
+ * Proveedores, Calendario, Informe, Usuarios): título de página, fila de
+ * KPIs y filas de filtros. Separado de cada page.tsx a propósito -- ver
+ * src/styles/README.md.
+ *
+ * El corte real es max-width: 1000px (clases .nx-h1 / .nx-kpis /
+ * .nx-filters / .nx-filters2 del HTML aprobado), no los breakpoints por
+ * defecto de Tailwind (640/768/1024/1280) que se usaban antes -- por eso
+ * la fila de KPIs colapsaba de 4 a 2 columnas a los 640px en vez de a los
+ * 1000px reales del diseño. Valores extraídos con getComputedStyle contra
+ * el HTML real, en escritorio (1600px) y en móvil (480px), a través de las
+ * 6 vistas.
+ */
+
+.h1 {
+  margin-bottom: 4px;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -0.035em;
+}
+@media (max-width: 1000px) {
+  .h1 {
+    font-size: 27px;
+  }
+}
+
+/* Fila de tarjetas KPI -- 4 columnas iguales en escritorio, 2 en móvil. */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+/* Variante de 5 KPIs (Informe es la única vista con 5 tarjetas). */
+.kpis5 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1000px) {
+  .kpis,
+  .kpis5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Fila de filtros de ancho variable (buscador + selects) -- columnas
+   iguales según su contenido en escritorio, una sola columna apilada en
+   móvil (mismo corte que .nx-filters del mockup). */
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+@media (max-width: 1000px) {
+  .filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Fila de filtros de 2 columnas fijas (mismo corte que .nx-filters2 del
+   mockup: 2 columnas tanto en escritorio como en móvil). */
+.filters2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}

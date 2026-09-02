@@ -6,7 +6,31 @@ import { supabase } from "@/lib/supabase-client";
 import { decodeJwtRole } from "@/lib/jwt";
 import { usuariosApi } from "@/services/api/usuarios-service";
 import { ApiError } from "@/lib/api-client";
-import type { AuthUser, Rol } from "@/types/domain";
+import type { Rol } from "@/types/api";
+
+/**
+ * Perfil de sesión ya resuelto para el resto de la app (no es un DTO del
+ * backend -- para eso está src/types/api.ts -- sino la forma que arma este
+ * store combinando el JWT de Supabase con GET /api/usuarios/me, ver
+ * buildUserFromSession/refreshProfile más abajo). Solo se usa acá, por eso
+ * vive junto al store en vez de en un archivo de tipos aparte.
+ */
+export interface AuthUser {
+  /** UUID real de Supabase Auth (session.user.id). */
+  id: string;
+  email: string;
+  displayName: string;
+  initials: string;
+  /**
+   * Rol de negocio. Viene de GET /api/usuarios/me apenas carga esa respuesta;
+   * mientras tanto, y si esa cuenta todavía no tiene fila de negocio (recién
+   * invitada, o el super_admin sembrado a mano), se usa el claim `user_role`
+   * del JWT (Auth Hook de Supabase -- ver
+   * Nexit_Back/docs/schema/03_auth_hook_custom_claims.sql) y
+   * `displayName`/`initials` se derivan del correo como aproximación.
+   */
+  rol: Rol;
+}
 
 interface AuthState {
   user: AuthUser | null;

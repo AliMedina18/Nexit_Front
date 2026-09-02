@@ -15,11 +15,11 @@ export function Logo({ height = 26 }: { height?: number }) {
 }
 
 /**
- * NEXIT's own logotype, set in Nunito Black — the closest free match to
- * Circular, the rounded geometric sans the "next!" wordmark uses — so the
- * software's mark reads as kin to the company logo rather than a mismatched
- * label next to it. The small square dot echoes the accent dot on the "!"
- * in the company mark, in the exact green sampled from that logo file.
+ * NEXIT's own logotype, set in the app's own sans (Archivo Black weight,
+ * ported 2026-08-28 from the approved Claude Diseño mockup) rather than a
+ * mismatched label next to the company logo. The small square dot echoes
+ * the accent dot on the "!" in the company mark, in the exact green sampled
+ * from that logo file.
  */
 export function NexitWordmark({ height = 19 }: { height?: number }) {
   return (

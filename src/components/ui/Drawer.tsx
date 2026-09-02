@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
+import styles from "@/styles/drawer.module.css";
 
 export function Drawer({
   open,
@@ -22,7 +23,7 @@ export function Drawer({
       onClick={onClose}
     >
       <div
-        className="flex h-screen w-[460px] max-w-[95vw] flex-col overflow-y-auto border-l border-border bg-surface transition-transform"
+        className={`flex h-screen ${styles.panel} flex-col overflow-y-auto border-l border-border bg-surface transition-transform`}
         style={{ transform: open ? "translateX(0)" : "translateX(20px)" }}
         onClick={(e) => e.stopPropagation()}
       >

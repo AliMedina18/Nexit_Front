@@ -1,10 +1,11 @@
 /**
  * Punto de entrada único a todos los servicios reales que hablan con Nexit_Back
- * (uno por controller/módulo del backend). Ninguno de estos se usa todavía en
- * ninguna pantalla -- son la capa de conexión lista para cuando el diseño de
- * cada vista esté listo. Los mocks de src/services/*.ts (usados hoy por las
- * pantallas de proyectos/proveedores) no se tocaron.
+ * (uno por controller/módulo del backend). Todas las pantallas del dashboard
+ * (clientes, proveedores, proyectos, calendario, informe, usuarios) y el login
+ * ya usan esta capa a través de sus stores -- no queda ninguna pantalla sobre
+ * datos mock (los mocks de la maqueta original fueron retirados).
  */
+export { authApi } from "./auth-service";
 export { calendarioApi } from "./calendario-service";
 export { catalogosApi } from "./catalogos-service";
 export { clientesApi } from "./clientes-service";

@@ -1,25 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { BarChart3, Bookmark, CalendarDays, Download, Minus, Printer, TrendingDown, TrendingUp } from "lucide-react";
 import { Badge, Button, TabButton, TabsShell } from "@/components/ui/primitives";
-import { PROJECT_STATUS_COLORS, BRIEF_STATUS_COLORS } from "@/lib/constants";
-import { downloadCSV, toCSV } from "@/lib/csv";
+import { Spinner } from "@/components/ui/Spinner";
+import { BRIEF_STATUS_COLORS, PROJECT_STATUS_COLORS, statusColor } from "@/lib/constants";
+import { downloadBlob } from "@/lib/download-file";
 import { fmtDay } from "@/lib/format";
-import {
-  computeMetrics,
-  deltaLabel,
-  miniDelta,
-  periodRange,
-  type InformeMode,
-} from "@/lib/informe";
-import { getPreviousSnapshot, saveSnapshot } from "@/lib/snapshot-storage";
-import { useProjectsStore } from "@/store/projects-store";
-import { useProvidersStore } from "@/store/providers-store";
-import { useUiStore } from "@/store/ui-store";
+import { deltaLabel, miniDelta, periodKey, periodRange, previousPeriodDate, type InformeMode } from "@/lib/informe";
 import type { Delta } from "@/lib/informe";
+import { informesApi } from "@/services/api/informes-service";
+import { ApiError } from "@/lib/api-client";
+import { useAuthStore } from "@/store/auth-store";
+import { useCatalogosStore } from "@/store/catalogos-store";
+import { useClientesStore } from "@/store/clientes-store";
+import { useProjectsStore } from "@/store/projects-store";
+import { useUiStore } from "@/store/ui-store";
+import type { InformeResumen, InformeSnapshot } from "@/types/api";
+import styles from "@/styles/dashboard.module.css";
 
 function DeltaTag({ delta }: { delta: Delta | null }) {
   if (!delta) return null;
@@ -41,17 +41,61 @@ function DeltaTag({ delta }: { delta: Delta | null }) {
 
 export default function InformePage() {
   const router = useRouter();
-  const { items: providers, fetchAll: fetchProviders } = useProvidersStore();
+  const user = useAuthStore((s) => s.user);
   const { items: projects, fetchAll: fetchProjects } = useProjectsStore();
+  const { items: clientes, fetchAll: fetchClientes } = useClientesStore();
+  const { estadosProyecto, fetchBase } = useCatalogosStore();
   const pushToast = useUiStore((s) => s.pushToast);
 
-  useEffect(() => {
-    fetchProviders();
-    fetchProjects();
-  }, [fetchProviders, fetchProjects]);
+  const puedeVer = user?.rol === "admin" || user?.rol === "super_admin";
 
   const [mode, setMode] = useState<InformeMode>("semanal");
-  const [, forceRerender] = useState(0);
+  const [current, setCurrent] = useState<InformeResumen | null>(null);
+  const [prev, setPrev] = useState<InformeSnapshot | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  const loadResumen = useCallback(async () => {
+    setLoading(true);
+    try {
+      const resumen = await informesApi.resumen();
+      setCurrent(resumen);
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : "No se pudo cargar el informe", "danger");
+    } finally {
+      setLoading(false);
+    }
+  }, [pushToast]);
+
+  const loadPrev = useCallback(async () => {
+    try {
+      const key = periodKey(mode, previousPeriodDate(mode));
+      const snap = await informesApi.snapshot(mode, key);
+      setPrev(snap);
+    } catch (err) {
+      if (err instanceof ApiError && err.statusCode === 404) {
+        setPrev(null);
+      } else {
+        setPrev(null);
+      }
+    }
+  }, [mode]);
+
+  useEffect(() => {
+    if (!puedeVer) return;
+    fetchProjects();
+    fetchClientes();
+    fetchBase();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial resumen load on mount/mode change
+    loadResumen();
+  }, [puedeVer, fetchProjects, fetchClientes, fetchBase, loadResumen]);
+
+  useEffect(() => {
+    if (!puedeVer) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial previous-period snapshot load on mount/mode change
+    loadPrev();
+  }, [puedeVer, loadPrev]);
 
   const periodWord = mode === "mensual" ? "el mes" : "la semana";
   const { start, end } = useMemo(() => periodRange(mode), [mode]);
@@ -63,60 +107,70 @@ export default function InformePage() {
           .replace(/^./, (c) => c.toUpperCase())
       : `${fmtDay(start)} – ${fmtDay(end)}, ${start.getFullYear()}`;
 
-  const current = useMemo(() => computeMetrics(providers, projects), [providers, projects]);
-  const prev = useMemo(() => getPreviousSnapshot(mode), [mode, providers, projects]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const compLabel = prev
-    ? `Comparado contra el snapshot guardado de ${mode === "mensual" ? "" : "la semana "}${prev.key.replace(
-        mode === "mensual" ? "snapshot-month:" : "snapshot-week:",
-        "",
-      )}`
+    ? `Comparado contra el snapshot guardado de ${prev.periodoKey}`
     : `Aún no hay ningún snapshot anterior guardado para comparar ${periodWord}.`;
 
   const rangeProjects = useMemo(
     () =>
       projects.filter((p) => {
-        if (!p.fecha) return false;
-        const f = new Date(`${p.fecha}T00:00:00`);
+        const fecha = p.fechaEvento?.slice(0, 10);
+        if (!fecha) return false;
+        const f = new Date(`${fecha}T00:00:00`);
         return f >= start && f <= end;
       }),
     [projects, start, end],
   );
 
-  const allStatuses = Object.keys(current.porEstado) as (keyof typeof PROJECT_STATUS_COLORS)[];
-  const allBriefs = Object.keys(current.porBrief) as (keyof typeof BRIEF_STATUS_COLORS)[];
+  const estadoNombrePorId = useMemo(
+    () => Object.fromEntries(estadosProyecto.map((e) => [e.id, e.nombre])),
+    [estadosProyecto],
+  );
+  const clienteNombrePorId = useMemo(() => Object.fromEntries(clientes.map((c) => [c.id, c.nombre])), [clientes]);
 
-  function handleSaveSnapshot() {
-    saveSnapshot(mode, current);
-    pushToast(mode === "mensual" ? "Snapshot de este mes guardado" : "Snapshot de esta semana guardado", "success");
-    forceRerender((n) => n + 1);
+  const allStatuses = current ? Object.keys(current.porEstado) : [];
+  const allBriefs = current ? Object.keys(current.porBrief) : [];
+
+  async function handleSaveSnapshot() {
+    setSaving(true);
+    try {
+      const key = periodKey(mode);
+      await informesApi.crearSnapshot({ tipo: mode, periodoKey: key });
+      pushToast(mode === "mensual" ? "Snapshot de este mes guardado" : "Snapshot de esta semana guardado", "success");
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : "No se pudo guardar el snapshot", "danger");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function openProject(id: number) {
+  function openProject(id: string) {
     router.push(`/proyectos?open=${id}`);
   }
 
-  function exportInformeCSV() {
-    const rows: (string | number)[][] = [
-      [`Informe ${mode} NEXIT`, ""],
-      [mode === "mensual" ? "Mes" : "Semana", `${start.toISOString().slice(0, 10)} a ${end.toISOString().slice(0, 10)}`],
-      ["", ""],
-      ["Métrica", "Valor"],
-      ["Proveedores totales", current.totalProveedores],
-      ["Proyectos totales", current.totalProyectos],
-      ["Proyectos sin proveedor asignado", current.sinProveedor],
-      ["", ""],
-      ["Proyecto", "Fecha", "Estado"],
-      ...[...projects]
-        .sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""))
-        .map((p) => [p.nombre, p.fecha || "", p.estado]),
-    ];
-    const [titleRow, ...restRows] = rows;
-    downloadCSV(`informe-${mode}.csv`, toCSV(titleRow.map(String), restRows));
+  async function exportarExcel() {
+    setExporting(true);
+    try {
+      const { blob, fileName } = await informesApi.exportarResumen();
+      downloadBlob(blob, fileName);
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : "No se pudo exportar el informe", "danger");
+    } finally {
+      setExporting(false);
+    }
   }
 
-  const sortedAll = [...projects].sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""));
-  const sortedRange = [...rangeProjects].sort((a, b) => (a.fecha || "").localeCompare(b.fecha || ""));
+  if (!puedeVer) {
+    return (
+      <div className="flex flex-col items-center gap-2 py-20 text-center text-text-2">
+        <BarChart3 size={28} strokeWidth={1.5} className="text-text-3" />
+        <div className="text-[13px]">Los informes están disponibles solo para administradores.</div>
+      </div>
+    );
+  }
+
+  const sortedAll = [...projects].sort((a, b) => (a.fechaEvento || "").localeCompare(b.fechaEvento || ""));
+  const sortedRange = [...rangeProjects].sort((a, b) => (a.fechaEvento || "").localeCompare(b.fechaEvento || ""));
 
   return (
     <div className="print-area">
@@ -137,115 +191,146 @@ export default function InformePage() {
               Mensual
             </TabButton>
           </TabsShell>
-          <Button icon={Download} onClick={exportInformeCSV}>
-            Exportar CSV
+          <Button icon={exporting ? undefined : Download} onClick={exportarExcel} disabled={exporting}>
+            {exporting ? <Spinner label="Exportando…" /> : "Exportar Excel"}
           </Button>
           <Button icon={Printer} onClick={() => window.print()}>
             Imprimir / PDF
           </Button>
-          <Button variant="primary" icon={Bookmark} onClick={handleSaveSnapshot}>
-            Guardar snapshot de {mode === "mensual" ? "este mes" : "esta semana"}
+          <Button variant="primary" icon={Bookmark} onClick={handleSaveSnapshot} disabled={saving}>
+            {saving ? "Guardando…" : `Guardar snapshot de ${mode === "mensual" ? "este mes" : "esta semana"}`}
           </Button>
         </div>
       </div>
 
-      <Section title={`Resumen general · ${periodoLabel}`}>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <MetricCard n={current.totalProveedores} label="Proveedores totales" delta={deltaLabel(current.totalProveedores, prev?.data.totalProveedores, periodWord)} />
-          <MetricCard n={current.totalProyectos} label="Proyectos totales" delta={deltaLabel(current.totalProyectos, prev?.data.totalProyectos, periodWord)} />
-          <MetricCard n={rangeProjects.length} label={`Proyectos ${mode === "mensual" ? "este mes" : "esta semana"}`} />
-          <MetricCard
-            n={current.sinProveedor}
-            label="Proyectos sin proveedor"
-            danger={current.sinProveedor > 0}
-            delta={deltaLabel(current.sinProveedor, prev?.data.sinProveedor, periodWord)}
-          />
-        </div>
-      </Section>
+      {loading || !current ? (
+        <div className="py-10 text-center text-[13px] text-text-3">Cargando informe…</div>
+      ) : (
+        <>
+          <Section title={`Resumen general · ${periodoLabel}`}>
+            <div className={styles.kpis5}>
+              <MetricCard n={current.totalProveedores} label="Proveedores totales" delta={deltaLabel(current.totalProveedores, prev?.totalProveedores, periodWord)} />
+              <MetricCard n={current.totalClientes} label="Clientes totales" delta={deltaLabel(current.totalClientes, prev?.totalClientes, periodWord)} />
+              <MetricCard n={current.totalProyectos} label="Proyectos totales" delta={deltaLabel(current.totalProyectos, prev?.totalProyectos, periodWord)} />
+              <MetricCard n={rangeProjects.length} label={`Proyectos ${mode === "mensual" ? "este mes" : "esta semana"}`} />
+              <MetricCard
+                n={current.proyectosSinProveedor}
+                label="Proyectos sin proveedor"
+                danger={current.proyectosSinProveedor > 0}
+                delta={deltaLabel(current.proyectosSinProveedor, prev?.proyectosSinProveedor, periodWord)}
+              />
+            </div>
+          </Section>
 
-      <Section title="Proyecto y estado">
-        {sortedAll.length === 0 ? (
-          <Empty text="No hay proyectos registrados." />
-        ) : (
-          sortedAll.map((p) => (
-            <BreakdownRow key={p.id} onClick={() => openProject(p.id)}>
-              <span className="flex-1 text-[13px]">
-                {p.nombre}{" "}
-                <span className="inline-flex items-center gap-1 text-text-3">
-                  · <CalendarDays size={11} strokeWidth={2} />
-                  {p.fecha ? fmtDay(new Date(`${p.fecha}T00:00:00`)) : "sin fecha"}
-                </span>
-              </span>
-              <Badge bg={PROJECT_STATUS_COLORS[p.estado].bg} color={PROJECT_STATUS_COLORS[p.estado].c}>
-                {p.estado}
-              </Badge>
-            </BreakdownRow>
-          ))
-        )}
-      </Section>
+          <Section title="Proyecto y estado">
+            {sortedAll.length === 0 ? (
+              <Empty text="No hay proyectos registrados." />
+            ) : (
+              sortedAll.map((p) => {
+                const estadoNombre = estadoNombrePorId[p.estadoId] ?? "—";
+                const st = statusColor(PROJECT_STATUS_COLORS, estadoNombre);
+                const fecha = p.fechaEvento?.slice(0, 10);
+                return (
+                  <BreakdownRow key={p.id} onClick={() => openProject(p.id)}>
+                    <span className="flex-1 text-[13px]">
+                      {p.nombre}{" "}
+                      <span className="inline-flex items-center gap-1 text-text-3">
+                        · <CalendarDays size={11} strokeWidth={2} />
+                        {fecha ? fmtDay(new Date(`${fecha}T00:00:00`)) : "sin fecha"}
+                      </span>
+                    </span>
+                    <Badge bg={st.bg} color={st.c}>
+                      {estadoNombre}
+                    </Badge>
+                  </BreakdownRow>
+                );
+              })
+            )}
+          </Section>
 
-      <Section title="Proyectos por estado (las 3 fases)">
-        {allStatuses.map((k) => {
-          const st = PROJECT_STATUS_COLORS[k as keyof typeof PROJECT_STATUS_COLORS];
-          const cnt = current.porEstado[k] || 0;
-          const delta = miniDelta(cnt, prev?.data.porEstado?.[k]);
-          return (
-            <BreakdownRow key={k}>
-              <Badge bg={st.bg} color={st.c}>
-                {k}
-              </Badge>
-              <span className="flex-1" />
-              <span className="font-semibold">{cnt}</span>
-              {delta && (
-                <span className={clsx("min-w-[34px] text-right text-xs font-semibold", delta.cls === "up" && "text-teal", delta.cls === "down" && "text-red", delta.cls === "flat" && "text-text-3")}>
-                  {delta.text}
-                </span>
-              )}
-            </BreakdownRow>
-          );
-        })}
-      </Section>
+          <Section title="Proyectos por estado (las 3 fases)">
+            {allStatuses.map((k) => {
+              const st = statusColor(PROJECT_STATUS_COLORS, k);
+              const cnt = current.porEstado[k] || 0;
+              const delta = miniDelta(cnt, prev?.porEstado?.[k]);
+              return (
+                <BreakdownRow key={k}>
+                  <Badge bg={st.bg} color={st.c}>
+                    {k}
+                  </Badge>
+                  <span className="flex-1" />
+                  <span className="font-semibold">{cnt}</span>
+                  {delta && (
+                    <span
+                      className={clsx(
+                        "min-w-[34px] text-right text-xs font-semibold",
+                        delta.cls === "up" && "text-teal",
+                        delta.cls === "down" && "text-red",
+                        delta.cls === "flat" && "text-text-3",
+                      )}
+                    >
+                      {delta.text}
+                    </span>
+                  )}
+                </BreakdownRow>
+              );
+            })}
+          </Section>
 
-      <Section title="Estado de entrega de brief">
-        {allBriefs.map((k) => {
-          const st = BRIEF_STATUS_COLORS[k as keyof typeof BRIEF_STATUS_COLORS];
-          const cnt = current.porBrief[k] || 0;
-          const delta = miniDelta(cnt, prev?.data.porBrief?.[k]);
-          return (
-            <BreakdownRow key={k}>
-              <Badge bg={st.bg} color={st.c}>
-                {k}
-              </Badge>
-              <span className="flex-1" />
-              <span className="font-semibold">{cnt}</span>
-              {delta && (
-                <span className={clsx("min-w-[34px] text-right text-xs font-semibold", delta.cls === "up" && "text-teal", delta.cls === "down" && "text-red", delta.cls === "flat" && "text-text-3")}>
-                  {delta.text}
-                </span>
-              )}
-            </BreakdownRow>
-          );
-        })}
-      </Section>
+          <Section title="Estado de entrega de brief">
+            {allBriefs.map((k) => {
+              const st = statusColor(BRIEF_STATUS_COLORS, k);
+              const cnt = current.porBrief[k] || 0;
+              const delta = miniDelta(cnt, prev?.porBrief?.[k]);
+              return (
+                <BreakdownRow key={k}>
+                  <Badge bg={st.bg} color={st.c}>
+                    {k}
+                  </Badge>
+                  <span className="flex-1" />
+                  <span className="font-semibold">{cnt}</span>
+                  {delta && (
+                    <span
+                      className={clsx(
+                        "min-w-[34px] text-right text-xs font-semibold",
+                        delta.cls === "up" && "text-teal",
+                        delta.cls === "down" && "text-red",
+                        delta.cls === "flat" && "text-text-3",
+                      )}
+                    >
+                      {delta.text}
+                    </span>
+                  )}
+                </BreakdownRow>
+              );
+            })}
+          </Section>
 
-      <Section title={`Proyectos programados ${mode === "mensual" ? "este mes" : "esta semana"} (${fmtDay(start)} – ${fmtDay(end)})`}>
-        {sortedRange.length === 0 ? (
-          <Empty text={`No hay proyectos con fecha ${mode === "mensual" ? "este mes" : "esta semana"}.`} />
-        ) : (
-          sortedRange.map((p) => (
-            <BreakdownRow key={p.id} onClick={() => openProject(p.id)}>
-              <span className="inline-flex flex-1 items-center gap-1 text-[13px]">
-                <CalendarDays size={11} strokeWidth={2} className="flex-shrink-0 text-text-3" />
-                {fmtDay(new Date(`${p.fecha}T00:00:00`))} · {p.nombre}{" "}
-                <span className="text-text-3">· {p.cliente || "—"}</span>
-              </span>
-              <Badge bg={PROJECT_STATUS_COLORS[p.estado].bg} color={PROJECT_STATUS_COLORS[p.estado].c}>
-                {p.estado}
-              </Badge>
-            </BreakdownRow>
-          ))
-        )}
-      </Section>
+          <Section title={`Proyectos programados ${mode === "mensual" ? "este mes" : "esta semana"} (${fmtDay(start)} – ${fmtDay(end)})`}>
+            {sortedRange.length === 0 ? (
+              <Empty text={`No hay proyectos con fecha ${mode === "mensual" ? "este mes" : "esta semana"}.`} />
+            ) : (
+              sortedRange.map((p) => {
+                const estadoNombre = estadoNombrePorId[p.estadoId] ?? "—";
+                const st = statusColor(PROJECT_STATUS_COLORS, estadoNombre);
+                const fecha = p.fechaEvento?.slice(0, 10) ?? "";
+                return (
+                  <BreakdownRow key={p.id} onClick={() => openProject(p.id)}>
+                    <span className="inline-flex flex-1 items-center gap-1 text-[13px]">
+                      <CalendarDays size={11} strokeWidth={2} className="flex-shrink-0 text-text-3" />
+                      {fecha ? fmtDay(new Date(`${fecha}T00:00:00`)) : "—"} · {p.nombre}{" "}
+                      <span className="text-text-3">· {clienteNombrePorId[p.clienteId ?? ""] || "—"}</span>
+                    </span>
+                    <Badge bg={st.bg} color={st.c}>
+                      {estadoNombre}
+                    </Badge>
+                  </BreakdownRow>
+                );
+              })
+            )}
+          </Section>
+        </>
+      )}
     </div>
   );
 }

@@ -1,0 +1,129 @@
+/**
+ * Estilos del login -- separados del componente a propósito (CSS aparte, no
+ * mezclado con JS/inline) porque el panel oscuro necesita dos media queries
+ * reales que Tailwind no cubre con utilidades sueltas:
+ *
+ *  - @media (max-height: 780px): en laptops la ventana es ancha pero baja
+ *    (la barra de pestañas + marcadores del navegador se come buena parte del
+ *    alto). El HTML del mockup (Nexit Standalone.html, bloque de estilos
+ *    "nx-login-*") reduce el título/relleno/espaciados en ese caso -- por eso
+ *    el panel se veía "muy grande" en una laptop normal aunque el ANCHO diera
+ *    para los 64px: el problema era el alto de la ventana, no el ancho.
+ *  - @media (max-width: 1000px): el panel oscuro desaparece por completo y el
+ *    formulario ocupa toda la pantalla (mismo corte que usa el HTML original).
+ *
+ * Todos los valores están copiados 1:1 del CSS real del mockup (getComputedStyle
+ * + el bloque <style> embebido), no aproximados.
+ */
+
+.shell {
+  grid-template-columns: 1.05fr 1fr;
+}
+
+@media (max-width: 1000px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  padding: 48px 56px;
+  gap: 32px;
+}
+
+@media (max-width: 1000px) {
+  .panel {
+    display: none;
+  }
+}
+
+@media (max-height: 780px) {
+  .panel {
+    padding: 34px 38px;
+    gap: 22px;
+  }
+}
+
+.h1 {
+  font-size: 64px;
+}
+
+@media (max-height: 780px) {
+  .h1 {
+    font-size: 44px;
+  }
+}
+
+.lead {
+  margin-top: 22px;
+  font-size: 17px;
+}
+
+@media (max-height: 780px) {
+  .lead {
+    margin-top: 14px;
+    font-size: 15px;
+  }
+}
+
+.kpis {
+  margin-top: 48px;
+  padding-top: 28px;
+}
+
+@media (max-height: 780px) {
+  .kpis {
+    margin-top: 24px;
+    padding-top: 18px;
+  }
+}
+
+.pattern {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    repeating-conic-gradient(from 30deg, rgba(0, 0, 0, 0) 0deg, rgba(0, 0, 0, 0) 120deg, #3c3c3c 0deg, #3c3c3c 180deg),
+    repeating-conic-gradient(from 30deg, #1d1d1d 0deg, #1d1d1d 60deg, #4e4f51 0deg, #4e4f51 120deg, #3c3c3c 0deg, #3c3c3c 180deg);
+  background-size: 200px 115.4px, 200px 115.4px;
+  background-position: 100px 57.7px, 0% 0%;
+  mask-image: linear-gradient(#000, transparent 85%);
+  -webkit-mask-image: linear-gradient(#000, transparent 85%);
+  opacity: 0.5;
+}
+
+.ring {
+  position: absolute;
+  pointer-events: none;
+  right: -140px;
+  bottom: -140px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  border: 1px solid #1e1e1e;
+}
+
+/* Flechita animada de los botones de enviar/iniciar sesión -- pedido
+   explícito: "que la flechita tenga una animación que se mueva". No viene
+   del mockup (el mockup no anima esa flecha en reposo); es una idea propia
+   de Alicia, implementada como un vaivén sutil e infinito para no resultar
+   ruidosa. */
+.arrowIcon {
+  animation: arrowNudge 1.6s ease-in-out infinite;
+}
+@keyframes arrowNudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .arrowIcon {
+    animation: none;
+  }
+}

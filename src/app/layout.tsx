@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
-import { Nunito } from "next/font/google";
-import "./globals.css";
+import { Archivo, IBM_Plex_Mono } from "next/font/google";
+import "@/styles/globals.css";
 import { Toaster } from "@/components/ui/Toaster";
 
-// Nunito is the closest free match to Circular — the rounded geometric sans
-// the "next!" wordmark uses — so the NEXIT logotype and the rest of the UI
-// read as the same type family as the company logo, not a mismatched font.
-const nunito = Nunito({
+// Archivo (headings/body) + IBM Plex Mono (eyebrow labels, mono data) --
+// ported 2026-08-28 from the approved Claude Diseño mockup, replacing the
+// previous Nunito-based ("Lovable" era) type system.
+const archivo = Archivo({
   subsets: ["latin"],
-  variable: "--font-nunito",
-  weight: ["400", "500", "600", "700", "800", "900"],
+  variable: "--font-archivo",
+  weight: ["400", "500", "600", "700"],
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  variable: "--font-plex-mono",
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -19,7 +25,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={nunito.variable}>
+    <html lang="es" className={`${archivo.variable} ${plexMono.variable}`}>
       <body>
         {children}
         <Toaster />

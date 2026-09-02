@@ -1,0 +1,16 @@
+/**
+ * Ancho del panel deslizante de detalle -- separado a propósito (CSS
+ * aparte, no un estilo inline). 620px en escritorio, ancho completo por
+ * debajo de 1000px: valores reales de la clase .nx-detail del HTML
+ * aprobado (getComputedStyle). Antes este panel usaba 460px con un
+ * max-w-[95vw] que no correspondía al mockup ni tenía un corte real.
+ */
+.panel {
+  width: 620px;
+  max-width: 100vw;
+}
+@media (max-width: 1000px) {
+  .panel {
+    width: 100vw;
+  }
+}

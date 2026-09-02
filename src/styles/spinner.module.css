@@ -1,0 +1,62 @@
+/**
+ * Indicador de "cargando" para botones (Enviar código, Iniciar sesión,
+ * etc.) -- antes /login solo cambiaba el texto del botón ("Enviando…") sin
+ * ninguna animación (pedido explícito: le faltaba "la animación de carga").
+ * Tres puntitos que rebotan, adaptado del patrón que Alicia mandó (mismo
+ * timing/easing, reescalado a ~22x14px para caber dentro de un botón de
+ * 50px de alto en vez de los 200x60px originales, y en blanco para verse
+ * bien sobre el botón oscuro).
+ */
+.wrapper {
+  display: inline-flex;
+  align-items: flex-end;
+  width: 22px;
+  height: 14px;
+  position: relative;
+}
+
+.dot {
+  width: 4px;
+  height: 4px;
+  position: absolute;
+  border-radius: 50%;
+  background-color: currentColor;
+  transform-origin: 50%;
+  animation: bounce-dot 0.5s alternate infinite ease;
+}
+
+@keyframes bounce-dot {
+  0% {
+    bottom: 0;
+    height: 3px;
+    border-radius: 6px 6px 3px 3px;
+    transform: scaleX(1.6);
+  }
+  40% {
+    height: 4px;
+    border-radius: 50%;
+    transform: scaleX(1);
+  }
+  100% {
+    bottom: 10px;
+  }
+}
+
+.dot:nth-child(1) {
+  left: 0;
+  animation-delay: 0s;
+}
+.dot:nth-child(2) {
+  left: 9px;
+  animation-delay: 0.1s;
+}
+.dot:nth-child(3) {
+  left: 18px;
+  animation-delay: 0.15s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation-duration: 0.01s;
+  }
+}

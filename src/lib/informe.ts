@@ -1,5 +1,11 @@
-import { PROJECT_STATUS_GROUPS, BRIEF_STATUSES } from "@/types/domain";
-import type { MetricSnapshot, Project, Provider } from "@/types/domain";
+/**
+ * Helpers de período (semana ISO / mes) y de comparación (deltas) usados por
+ * Informes. `computeMetrics`/`snapshotPrefix` (que calculaban todo esto en el
+ * cliente sobre los mocks) se retiraron 2026-08-28: el backend real ya expone
+ * los totales (`informesApi.resumen()`) y guarda snapshots compartidos por
+ * equipo (`informesApi.crearSnapshot`/`snapshot`), así que ya no hace falta
+ * ni recalcular nada aquí ni guardar snapshots en localStorage por navegador.
+ */
 
 export type InformeMode = "semanal" | "mensual";
 
@@ -47,34 +53,13 @@ export function periodRange(mode: InformeMode, d: Date = new Date()) {
 export function periodKey(mode: InformeMode, d: Date = new Date()) {
   return mode === "mensual" ? monthKey(d) : isoWeekKey(d);
 }
-export function snapshotPrefix(mode: InformeMode) {
-  return mode === "mensual" ? "snapshot-month:" : "snapshot-week:";
-}
 
-const ALL_PROJECT_STATUSES = PROJECT_STATUS_GROUPS.flatMap((g) => g.options);
-
-export function computeMetrics(providers: Provider[], projects: Project[]): MetricSnapshot["data"] {
-  const porEstado: Record<string, number> = {};
-  ALL_PROJECT_STATUSES.forEach((k) => (porEstado[k] = 0));
-  projects.forEach((p) => {
-    const k = p.estado || "Planeación interna";
-    porEstado[k] = (porEstado[k] || 0) + 1;
-  });
-
-  const porBrief: Record<string, number> = {};
-  BRIEF_STATUSES.forEach((k) => (porBrief[k] = 0));
-  projects.forEach((p) => {
-    const k = p.briefEstado || "Pendiente por enviar";
-    porBrief[k] = (porBrief[k] || 0) + 1;
-  });
-
-  return {
-    totalProveedores: providers.length,
-    totalProyectos: projects.length,
-    sinProveedor: projects.filter((p) => p.proveedorIds.length === 0).length,
-    porEstado,
-    porBrief,
-  };
+/** La fecha "representativa" del período anterior (7 días atrás, o el 1.º del mes anterior). */
+export function previousPeriodDate(mode: InformeMode, d: Date = new Date()): Date {
+  if (mode === "mensual") return new Date(d.getFullYear(), d.getMonth() - 1, 1);
+  const prev = new Date(d);
+  prev.setDate(d.getDate() - 7);
+  return prev;
 }
 
 export interface Delta {
