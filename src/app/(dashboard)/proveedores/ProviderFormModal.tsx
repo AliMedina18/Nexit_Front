@@ -338,8 +338,8 @@ export function ProviderFormModal({
                   onClick={() => toggleServicio(s.id)}
                   className={
                     active
-                      ? "rounded-full bg-text px-2.5 py-1 text-[11px] font-medium text-green"
-                      : "rounded-full bg-gray-light px-2.5 py-1 text-[11px] font-medium text-text-2 hover:bg-border"
+                      ? "rounded-[var(--radius-md)] bg-text px-2.5 py-1 text-[11px] font-medium text-green"
+                      : "rounded-[var(--radius-md)] bg-gray-light px-2.5 py-1 text-[11px] font-medium text-text-2 hover:bg-border"
                   }
                 >
                   {s.nombre}

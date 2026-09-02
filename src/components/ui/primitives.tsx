@@ -321,7 +321,7 @@ export function TabButton({
   return (
     <button
       className={clsx(
-        "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border-none bg-transparent px-3.5 py-1.5 text-[13px] font-medium transition-colors",
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-md)] border-none bg-transparent px-3.5 py-1.5 text-[13px] font-medium transition-colors",
         active ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text",
       )}
       {...props}
