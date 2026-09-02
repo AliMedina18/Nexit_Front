@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import type { Proyecto, ProyectoInput, ProyectoPrioridad, SeguimientoProyecto, SeguimientoProyectoInput } from "@/types/api";
+import type { ImportarResultado, Proyecto, ProyectoInput, ProyectoPrioridad, SeguimientoProyecto, SeguimientoProyectoInput } from "@/types/api";
 
 /**
  * Conecta contra ProyectosController real (Nexit_Back). DELETE requiere
@@ -23,4 +23,12 @@ export const proyectosApi = {
   /** Bitácora completa del proyecto, más reciente primero (agregado 2026-08-26). */
   listarSeguimiento: (proyectoId: string) =>
     apiClient.get<SeguimientoProyecto[]>(`/api/proyectos/${proyectoId}/seguimiento`),
+  /** Descarga todos los proyectos como .xlsx (docs/31) -- úsalo con downloadBlob(). No incluye equipo/proveedores/gerente (se completan luego en la pantalla de edición). */
+  exportar: () => apiClient.getFile("/api/proyectos/exportar", "proyectos.xlsx"),
+  /** Carga masiva desde .xlsx (docs/31, requiere admin/super_admin) -- Cliente/Estado se resuelven por nombre. */
+  importar: (archivo: File) => {
+    const form = new FormData();
+    form.append("archivo", archivo);
+    return apiClient.postForm<ImportarResultado>("/api/proyectos/importar", form);
+  },
 };

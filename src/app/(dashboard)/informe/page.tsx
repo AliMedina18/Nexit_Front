@@ -174,6 +174,13 @@ export default function InformePage() {
 
   return (
     <div className="print-area">
+      <div className="mb-5">
+        <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">Operación</div>
+        <h1 className={styles.h1}>Informes</h1>
+        <p className="text-[13px] text-text-2">
+          Resumen de la operación, evolución del periodo y estado de los proyectos.
+        </p>
+      </div>
       <div className="mb-4.5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="inline-flex items-center gap-1.5 text-base font-semibold">

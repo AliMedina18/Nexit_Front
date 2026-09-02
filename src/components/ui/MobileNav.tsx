@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { LogOut, Menu } from "lucide-react";
 import { MOBILE_NAV_MORE, MOBILE_NAV_PRIMARY } from "@/lib/nav-items";
 import { useAuthStore } from "@/store/auth-store";
-import { Modal } from "@/components/ui/Modal";
 import styles from "@/styles/shell.module.css";
 
 /**
@@ -16,6 +16,12 @@ import styles from "@/styles/shell.module.css";
  * más la cuenta/cerrar sesión detrás de "Más", igual que el
  * <nav class="nx-mobile"> del HTML aprobado (Clientes / Proyectos /
  * Proveedores / Más).
+ *
+ * "Más" abre una hoja inferior (bottom sheet) anclada al borde de abajo con
+ * esquinas superiores redondeadas y un "grab handle" -- no el diálogo
+ * centrado genérico (components/ui/Modal.tsx), que el HTML aprobado usa
+ * solo para formularios. Medidas (radio 12px, handle 38x4px, ítems de
+ * 44px) tomadas con getComputedStyle contra el HTML real en 390px.
  */
 export function MobileNav() {
   const pathname = usePathname();
@@ -23,6 +29,18 @@ export function MobileNav() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMoreOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
 
   const moreActive = MOBILE_NAV_MORE.some((item) => pathname.startsWith(item.href));
 
@@ -45,52 +63,82 @@ export function MobileNav() {
             </Link>
           );
         })}
-        <button type="button" className={styles.mobileNavItem} onClick={() => setMoreOpen(true)}>
+        <button
+          type="button"
+          className={styles.mobileNavItem}
+          onClick={() => setMoreOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+        >
           {moreActive && <span aria-hidden className={styles.mobileNavActiveBar} />}
           <Menu size={20} strokeWidth={1.7} />
           <span>Más</span>
         </button>
       </nav>
 
-      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title="Más" maxWidth={340}>
-        <div className="flex flex-col gap-1">
-          {MOBILE_NAV_MORE.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMoreOpen(false)}
-                className="flex items-center gap-3 rounded-[3px] px-2.5 py-2.5 text-[14px] font-medium text-text hover:bg-gray-light"
-              >
-                <Icon size={18} strokeWidth={1.7} />
-                {item.label}
-              </Link>
-            );
-          })}
+      {mounted &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Más"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 transition-opacity"
+            style={{ opacity: moreOpen ? 1 : 0, pointerEvents: moreOpen ? "all" : "none" }}
+            onClick={() => setMoreOpen(false)}
+          >
+            <div
+              className="w-full max-w-[480px] rounded-t-[12px] bg-surface px-3.5 pb-[calc(18px+env(safe-area-inset-bottom))] pt-2.5 transition-transform"
+              style={{ transform: moreOpen ? "translateY(0)" : "translateY(24px)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div aria-hidden className="mx-auto mb-3.5 h-1 w-[38px] rounded-full bg-border-strong" />
 
-          {user && (
-            <>
-              <div className="mt-2 border-t border-border pt-3">
-                <div className="truncate px-2.5 text-[13px] font-medium text-text">{user.displayName}</div>
-                <div className="truncate px-2.5 pb-1 text-xs text-text-3">{user.email}</div>
+              <div className="flex flex-col gap-1">
+                {MOBILE_NAV_MORE.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setMoreOpen(false)}
+                      className="flex h-11 items-center gap-[13px] rounded-[4px] px-2.5 text-[15px] font-medium text-text hover:bg-gray-light"
+                    >
+                      <Icon size={18} strokeWidth={1.7} />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+
+                {user && (
+                  <>
+                    <div className="mt-2.5 flex items-center gap-2.5 border-t border-border pt-3.5">
+                      <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-green text-[12px] font-semibold text-text">
+                        {user.initials}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[14px] font-medium text-text">{user.displayName}</div>
+                        <div className="truncate text-[12px] text-text-3">{user.rol}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setMoreOpen(false);
+                          await logout();
+                          router.replace("/login");
+                        }}
+                        className="flex h-11 flex-shrink-0 items-center gap-1.5 rounded-[3px] border border-border px-3.5 text-[13px] font-medium text-text hover:bg-gray-light"
+                      >
+                        <LogOut size={14} strokeWidth={2} />
+                        Salir
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  setMoreOpen(false);
-                  await logout();
-                  router.replace("/login");
-                }}
-                className="flex items-center gap-3 rounded-[3px] px-2.5 py-2.5 text-left text-[14px] text-text hover:bg-gray-light"
-              >
-                <LogOut size={18} strokeWidth={1.7} />
-                Cerrar sesión
-              </button>
-            </>
-          )}
-        </div>
-      </Modal>
+            </div>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

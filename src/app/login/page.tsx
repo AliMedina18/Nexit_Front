@@ -20,6 +20,32 @@ import styles from "@/styles/login.module.css";
  * pantalla no decide "primera vez o no" por adelantado -- eso es a
  * propósito, ver docs/10 -- pero sí puede ahorrarle escribirlo de nuevo). */
 const LAST_EMAIL_KEY = "nexit_last_email";
+
+/** Dominios de correo permitidos para iniciar sesión -- Nexit_Back/docs/09
+ * (docs/schema/seed_geografia_categorias_estados.sql, "novena revisión",
+ * confirmado 2026-08-23): 'agencianextmkt.com' es el ÚNICO dominio permitido
+ * hoy -- lo confirmó la usuaria con cuentas reales bajo ese dominio, y el
+ * antiguo placeholder 'nextexperiencial.com' ya se retiró de la tabla. Esta
+ * es una validación de UX (mensaje inmediato, sin esperar la ida y vuelta
+ * al backend/Supabase) -- el filtro real y definitivo sigue viviendo en
+ * Nexit_Back (CreateUsuarioValidator / InvitacionValidators) y en el
+ * trigger de Postgres check_usuario_dominio_correo, tal como documenta
+ * docs/10. Si algún día se agrega otro dominio, es un INSERT en esa misma
+ * tabla del backend -- y hay que reflejarlo acá también. */
+const DOMINIOS_CORREO_PERMITIDOS = ["agencianextmkt.com"];
+
+function esDominioPermitido(correo: string): boolean {
+  const dominio = correo.trim().toLowerCase().split("@")[1];
+  if (!dominio) return false;
+  return DOMINIOS_CORREO_PERMITIDOS.includes(dominio);
+}
+
+function mensajeDominioNoPermitido(): string {
+  if (DOMINIOS_CORREO_PERMITIDOS.length === 1) {
+    return `Solo se permiten correos del dominio @${DOMINIOS_CORREO_PERMITIDOS[0]}.`;
+  }
+  return `Solo se permiten correos de estos dominios: ${DOMINIOS_CORREO_PERMITIDOS.map((d) => `@${d}`).join(", ")}.`;
+}
 function rememberEmail(value: string) {
   try {
     localStorage.setItem(LAST_EMAIL_KEY, value);
@@ -88,16 +114,17 @@ export default function LoginPage() {
   const pushToast = useUiStore((s) => s.pushToast);
 
   const [step, setStep] = useState<Step>("email");
-  // Inicializador perezoso (no un useEffect): lee el correo recordado antes
-  // del primer render, así no hay un "flash" del campo vacío ni un setState
-  // disparado dentro de un efecto (regla react-hooks/set-state-in-effect).
-  const [email, setEmail] = useState<string>(() => {
-    try {
-      return localStorage.getItem(LAST_EMAIL_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  });
+  // Arranca vacío tanto en el servidor como en el primer render del cliente
+  // -- a propósito. Antes se leía localStorage en el inicializador de
+  // useState, pero ese inicializador también corre durante el renderizado
+  // en el servidor (Next.js SSR), donde localStorage no existe: el
+  // servidor siempre renderizaba el campo vacío y, si el navegador SÍ tenía
+  // un correo recordado, el cliente lo mostraba apenas hidrataba -- server
+  // y cliente no coincidían y React tiraba "Hydration failed" (mismo
+  // problema que tenía Intro.tsx). El correo recordado se carga abajo, en
+  // el efecto que ya existía para la autodetección "recurrente" (docs/30) --
+  // así no hay dos lugares leyendo la misma llave de localStorage.
+  const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -111,8 +138,18 @@ export default function LoginPage() {
   // paso de correo como siempre -- por eso el catch no hace nada: se degrada
   // con gracia al comportamiento manual que ya existía (docs/10 §2.2).
   useEffect(() => {
-    const correoRecordado = email.trim();
+    let correoRecordado = "";
+    try {
+      correoRecordado = localStorage.getItem(LAST_EMAIL_KEY)?.trim() ?? "";
+    } catch {
+      // localStorage no disponible -- no es crítico, solo se pierde el prellenado.
+    }
     if (!correoRecordado) return;
+    // Deliberado: mismo motivo que en Intro.tsx -- el correo recordado solo
+    // se puede leer después de montar (ver comentario junto a useState de
+    // arriba), así que llenarlo implica un setState acá.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEmail(correoRecordado);
     authApi
       .estadoCuenta(correoRecordado)
       .then((estado) => {
@@ -121,9 +158,8 @@ export default function LoginPage() {
       .catch(() => {
         // Silencioso a propósito -- ver comentario de arriba.
       });
-    // Solo debe correr una vez al montar, con el correo recordado inicial;
-    // no queremos repetir la consulta cada vez que la persona escribe.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Solo debe correr una vez al montar; no queremos repetir la consulta
+    // cada vez que la persona escribe.
   }, []);
 
   function goToDashboard() {
@@ -142,6 +178,7 @@ export default function LoginPage() {
   async function manejarContinuarConCorreo() {
     setError(null);
     if (!email.trim()) return setError("Escribe tu correo.");
+    if (!esDominioPermitido(email)) return setError(mensajeDominioNoPermitido());
     setSubmitting(true);
     let tieneContrasena = false;
     try {
@@ -160,6 +197,7 @@ export default function LoginPage() {
   async function enviarCodigo() {
     setError(null);
     if (!email.trim()) return setError("Escribe tu correo.");
+    if (!esDominioPermitido(email)) return setError(mensajeDominioNoPermitido());
     setSubmitting(true);
     const { error: err } = await supabase.auth.signInWithOtp({ email: email.trim() });
     setSubmitting(false);
@@ -215,6 +253,7 @@ export default function LoginPage() {
   async function solicitarRecuperacion() {
     setError(null);
     if (!email.trim()) return setError("Escribe tu correo.");
+    if (!esDominioPermitido(email)) return setError(mensajeDominioNoPermitido());
     setSubmitting(true);
     const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim());
     setSubmitting(false);

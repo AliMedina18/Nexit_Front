@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, MapPin } from "lucide-react";
+import { Mail, MapPin, Pencil } from "lucide-react";
 import { Avatar, Tag } from "@/components/ui/primitives";
 import type { Cliente } from "@/types/api";
 
@@ -11,10 +11,10 @@ export function ClienteCard({ cliente, onOpen }: { cliente: Cliente; onOpen: () 
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())}
-      className="cursor-pointer rounded-[var(--radius-md)] border border-border bg-surface p-3 transition-shadow hover:border-border-strong hover:shadow-sm"
+      className="min-h-[152px] cursor-pointer rounded-[var(--radius-md)] border border-border bg-surface p-4 transition-shadow hover:border-text hover:shadow-sm"
     >
       <div className="flex items-start gap-2.5">
-        <Avatar nombre={cliente.nombre} size="sm" />
+        <Avatar nombre={cliente.nombre} size="md" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-semibold leading-tight">{cliente.nombre}</div>
           <div className="mt-0.5 truncate text-[11px] text-text-2">{cliente.sector || "Sin sector"}</div>
@@ -35,9 +35,22 @@ export function ClienteCard({ cliente, onOpen }: { cliente: Cliente; onOpen: () 
         </div>
       )}
 
-      <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-[11px] text-text-2">
+      <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-[11px] text-text-2">
         <span className="truncate">{cliente.contacto || "Sin contacto"}</span>
-        {cliente.contacto && cliente.cargoContacto && <Tag>{cliente.cargoContacto}</Tag>}
+        <div className="flex items-center gap-2">
+          {cliente.contacto && cliente.cargoContacto && <Tag>{cliente.cargoContacto}</Tag>}
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen();
+            }}
+            aria-label={`Abrir ${cliente.nombre}`}
+            className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:bg-gray-light hover:text-text"
+          >
+            <Pencil size={13} strokeWidth={2} />
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -13,33 +13,46 @@ const SEEN_KEY = "nexit_intro_v1";
  * botón "Entrar" permite saltarla en cualquier momento.
  */
 export function Intro() {
-  // Inicializador perezoso (no un useEffect + setState): se decide de una vez
-  // si ya la vio antes del primer render, sin disparar un setState síncrono
-  // dentro de un efecto (regla react-hooks/set-state-in-effect).
-  const [visible, setVisible] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(SEEN_KEY) !== "1";
-    } catch {
-      // localStorage no disponible (modo privado, etc.) -- no bloquea el login,
-      // se asume que aún no la ha visto.
-      return true;
-    }
-  });
+  // Arranca en `false` tanto en el servidor como en el primer render del
+  // cliente -- a propósito, para que los dos coincidan. Antes esto se
+  // decidía en el inicializador de useState leyendo localStorage, pero ese
+  // inicializador también corre durante el renderizado en el servidor
+  // (Next.js SSR), donde localStorage no existe: el servidor siempre
+  // asumía "primera vez" (true) y, si el navegador YA la había visto, el
+  // cliente decidía false apenas hidrataba -- server y cliente mostraban
+  // árboles distintos y React tiraba "Hydration failed". Decidirlo en el
+  // efecto de abajo (que solo corre en el navegador, después de montar)
+  // evita el mismatch; el único costo es que, para quien nunca la ha visto,
+  // la animación aparece un instante después del primer pintado en vez de
+  // venir ya en el HTML del servidor -- imperceptible en la práctica.
+  const [visible, setVisible] = useState(false);
   const [out, setOut] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const unmountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!visible) return;
+    let yaLaVio = false;
+    try {
+      yaLaVio = localStorage.getItem(SEEN_KEY) === "1";
+    } catch {
+      // localStorage no disponible (modo privado, etc.) -- no bloquea el login,
+      // se asume que aún no la ha visto.
+    }
+    if (yaLaVio) return;
+
+    // Deliberado: esto es justo lo que evita el mismatch de hidratación de
+    // arriba -- no hay forma de saber si ya la vio antes sin preguntarle a
+    // localStorage, y eso solo se puede hacer después de montar. Un
+    // render extra en el cliente es el costo aceptado.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setVisible(true);
     closeTimer.current = setTimeout(close, 2600);
 
     return () => {
       if (closeTimer.current) clearTimeout(closeTimer.current);
       if (unmountTimer.current) clearTimeout(unmountTimer.current);
     };
-    // Solo debe correr una vez al montar, con el valor inicial de "visible";
-    // "close" no cambia entre renders.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Solo debe correr una vez al montar; "close" no cambia entre renders.
   }, []);
 
   function close() {

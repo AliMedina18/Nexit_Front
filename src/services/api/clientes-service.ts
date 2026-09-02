@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import type { Cliente, ClienteInput, ClientePrioridad } from "@/types/api";
+import type { Cliente, ClienteInput, ClientePrioridad, ImportarResultado } from "@/types/api";
 
 /**
  * Conecta contra ClientesController real (Nexit_Back). GET/POST no requieren
@@ -14,4 +14,12 @@ export const clientesApi = {
   create: (input: ClienteInput) => apiClient.post<Cliente>("/api/clientes", input),
   update: (id: string, input: ClienteInput) => apiClient.put<Cliente>(`/api/clientes/${id}`, { ...input, id }),
   remove: (id: string) => apiClient.delete<void>(`/api/clientes/${id}`),
+  /** Descarga todos los clientes como .xlsx (docs/31) -- úsalo con downloadBlob() de src/lib/download-file.ts. El mismo formato sirve como plantilla para importar. */
+  exportar: () => apiClient.getFile("/api/clientes/exportar", "clientes.xlsx"),
+  /** Carga masiva desde .xlsx (docs/31, requiere admin/super_admin) -- una fila inválida no detiene el resto, queda reportada en `errores`. */
+  importar: (archivo: File) => {
+    const form = new FormData();
+    form.append("archivo", archivo);
+    return apiClient.postForm<ImportarResultado>("/api/clientes/importar", form);
+  },
 };

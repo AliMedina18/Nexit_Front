@@ -17,6 +17,8 @@ interface ClientesState {
   /** Mensaje del último fetchAll que falló, o null. La pantalla lo usa para mostrar un estado de error con botón "Reintentar" en vez de una lista vacía engañosa. */
   error: string | null;
   fetchAll: () => Promise<void>;
+  /** Fuerza un fetchAll nuevo aunque ya esté `loaded` -- para después de una importación masiva (docs/31), que crea filas por fuera de add/update/remove. */
+  refresh: () => Promise<void>;
   addCliente: (input: ClienteInput) => Promise<Cliente>;
   updateCliente: (id: string, input: ClienteInput) => Promise<Cliente>;
   removeCliente: (id: string) => Promise<void>;
@@ -36,6 +38,10 @@ export const useClientesStore = create<ClientesState>((set, get) => ({
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : "No se pudieron cargar los clientes." });
     }
+  },
+  refresh: async () => {
+    set({ loaded: false });
+    await get().fetchAll();
   },
   addCliente: async (input) => {
     const created = await clientesApi.create(input);

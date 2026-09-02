@@ -449,3 +449,17 @@ export interface PresenciaUsuario {
 export interface EstadoCuentaResponse {
   tieneContrasena: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Importación masiva desde Excel (clientes/proveedores/proyectos, docs/31)
+// ---------------------------------------------------------------------------
+
+export interface ImportarError {
+  fila: number;
+  mensaje: string;
+}
+
+export interface ImportarResultado {
+  creados: number;
+  errores: ImportarError[];
+}

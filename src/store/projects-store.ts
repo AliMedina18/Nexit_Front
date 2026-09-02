@@ -12,6 +12,8 @@ interface ProjectsState {
   /** Mensaje del último fetchAll que falló, o null. La pantalla lo usa para mostrar un estado de error con botón "Reintentar" en vez de una lista vacía engañosa. */
   error: string | null;
   fetchAll: () => Promise<void>;
+  /** Fuerza un fetchAll nuevo aunque ya esté `loaded` -- para después de una importación masiva (docs/31), que crea filas por fuera de add/update/remove. */
+  refresh: () => Promise<void>;
   addProject: (input: ProyectoInput) => Promise<Proyecto>;
   updateProject: (id: string, input: ProyectoInput) => Promise<Proyecto>;
   removeProject: (id: string) => Promise<void>;
@@ -35,6 +37,10 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       // queda pegada en "cargando" sin aviso ni forma de reintentar.
       set({ loading: false, error: err instanceof Error ? err.message : "No se pudieron cargar los proyectos." });
     }
+  },
+  refresh: async () => {
+    set({ loaded: false });
+    await get().fetchAll();
   },
   addProject: async (input) => {
     const created = await proyectosApi.create(input);

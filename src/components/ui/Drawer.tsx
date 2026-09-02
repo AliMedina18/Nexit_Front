@@ -64,6 +64,22 @@ export function DrawerSection({ title, action }: { title: string; action?: React
   );
 }
 
+/** Caja de sección con fondo gris claro y título en negrita -- ported del
+ * HTML aprobado ("Contacto" / "Ubicación" en el detalle de proveedor):
+ * antes esas secciones eran solo un título pequeño en mayúsculas seguido
+ * de filas sueltas, sin la caja que las agrupa visualmente en el mockup. */
+export function DrawerBox({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return (
+    <div className="mt-3 rounded-[var(--radius-md)] bg-gray-light p-3.5 first:mt-0">
+      <div className="mb-2.5 flex items-center justify-between text-[13px] font-semibold text-text">
+        <span>{title}</span>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export function KeyValue({ k, v }: { k: string; v: ReactNode }) {
   return (
     <div className="mb-1.5 grid grid-cols-[130px_1fr] gap-x-2.5 gap-y-0.5 text-[13px]">

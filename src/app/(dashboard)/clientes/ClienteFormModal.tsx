@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Plus, X } from "lucide-react";
-import { Modal } from "@/components/ui/Modal";
+import { Drawer, DrawerCloseButton } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/primitives";
-import { Field, Input, Row, Textarea } from "@/components/ui/form";
+import { Field, FormSection, Input, Row, Textarea } from "@/components/ui/form";
 import type { Cliente, ClienteInput, ClienteTelefono } from "@/types/api";
 
 interface FormState {
@@ -117,67 +117,99 @@ export function ClienteFormModal({
   }
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={editing ? "Editar cliente" : "Nuevo cliente"}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" onClick={handleSave}>
-            Guardar cliente
-          </Button>
-        </>
-      }
-    >
-      <Field label="Nombre del cliente" required error={errors.nombre}>
-        <Input
-          value={form.nombre}
-          onChange={(e) => set("nombre", e.target.value)}
-          placeholder="Ej. Cámara de Comercio Bogotá"
-        />
-      </Field>
+    <Drawer open={open} onClose={onClose}>
+      <div className="sticky top-0 z-[1] flex items-start justify-between gap-3.5 border-b border-border bg-surface p-5">
+        <div className="min-w-0">
+          <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">
+            {editing ? "EDITAR CLIENTE" : "REGISTRAR CLIENTE"}
+          </div>
+          <h2 className="truncate text-[19px] font-semibold leading-tight">
+            {editing ? "Editar datos del cliente" : "Datos del nuevo cliente"}
+          </h2>
+        </div>
+        <DrawerCloseButton onClose={onClose} />
+      </div>
 
-      <Row cols={2}>
-        <Field label="Sector / industria">
-          <Input value={form.sector} onChange={(e) => set("sector", e.target.value)} placeholder="Ej. Finanzas" />
+      <div className="flex-1 p-5">
+        <FormSection n="01" title="Quién es" />
+        <Field label="Nombre de la empresa" required error={errors.nombre}>
+          <Input
+            value={form.nombre}
+            onChange={(e) => set("nombre", e.target.value)}
+            placeholder="Ej. Grupo Vitalis"
+          />
         </Field>
-        <Field label="Ciudad">
-          <Input value={form.ciudad} onChange={(e) => set("ciudad", e.target.value)} placeholder="Ej. Bogotá" />
+        <Field label="Industria">
+          <Input value={form.sector} onChange={(e) => set("sector", e.target.value)} placeholder="Consumo masivo, tecnología, finanzas…" />
         </Field>
-      </Row>
 
-      <Row cols={2}>
-        <Field label="Dirección">
-          <Input value={form.direccion} onChange={(e) => set("direccion", e.target.value)} placeholder="Dirección" />
-        </Field>
+        <FormSection n="02" title="Dónde está" />
+        <Row cols={2}>
+          <Field label="Ciudad">
+            <Input value={form.ciudad} onChange={(e) => set("ciudad", e.target.value)} placeholder="Ej. Bogotá" />
+          </Field>
+          <Field label="Dirección">
+            <Input value={form.direccion} onChange={(e) => set("direccion", e.target.value)} placeholder="Dirección" />
+          </Field>
+        </Row>
         <Field label="Sitio web">
           <Input value={form.web} onChange={(e) => set("web", e.target.value)} placeholder="https://…" />
         </Field>
-      </Row>
 
-      <Row cols={2}>
-        <Field label="Contacto principal">
-          <Input value={form.contacto} onChange={(e) => set("contacto", e.target.value)} placeholder="Nombre" />
+        <FormSection n="03" title="Con quién se habla" />
+        <Row cols={2}>
+          <Field label="Persona de contacto">
+            <Input value={form.contacto} onChange={(e) => set("contacto", e.target.value)} placeholder="Nombre y apellido" />
+          </Field>
+          <Field label="Cargo">
+            <Input
+              value={form.cargoContacto}
+              onChange={(e) => set("cargoContacto", e.target.value)}
+              placeholder="Ej. Gerente de Marketing"
+            />
+          </Field>
+        </Row>
+        <Field label="Teléfonos">
+          <div className="flex flex-col gap-2">
+            {form.telefonos.map((t, idx) => (
+              <div key={t.id ?? idx} className="flex items-center gap-1.5">
+                <Input
+                  value={t.telefono}
+                  onChange={(e) => updateTelefono(idx, { telefono: e.target.value })}
+                  placeholder="+57 300 000 0000"
+                  className="flex-1"
+                />
+                <Input
+                  value={t.etiqueta ?? ""}
+                  onChange={(e) => updateTelefono(idx, { etiqueta: e.target.value })}
+                  placeholder="Etiqueta (ej. oficina)"
+                  className="w-[160px]"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeTelefono(idx)}
+                  aria-label="Quitar teléfono"
+                  className="flex cursor-pointer items-center rounded border-none bg-transparent p-1.5 text-text-2 hover:bg-gray-light hover:text-red"
+                >
+                  <X size={14} strokeWidth={2} />
+                </button>
+              </div>
+            ))}
+            <Button size="sm" icon={Plus} onClick={addTelefono} className="self-start">
+              Agregar teléfono
+            </Button>
+          </div>
         </Field>
-        <Field label="Cargo del contacto">
-          <Input
-            value={form.cargoContacto}
-            onChange={(e) => set("cargoContacto", e.target.value)}
-            placeholder="Ej. Directora de Mercadeo"
-          />
-        </Field>
-      </Row>
-
-      <Row cols={2}>
-        <Field label="Email">
+        <Field label="Correo">
           <Input
             type="email"
             value={form.email}
             onChange={(e) => set("email", e.target.value)}
-            placeholder="contacto@empresa.com"
+            placeholder="nombre@empresa.com"
           />
         </Field>
+
+        <FormSection n="04" title="Qué recordar" />
         <Field label="Valor de referencia">
           <Input
             value={form.valorReferencia}
@@ -185,43 +217,17 @@ export function ClienteFormModal({
             placeholder="Ej. $50.000.000 / año"
           />
         </Field>
-      </Row>
+        <Field label="Notas internas">
+          <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Historial, condiciones…" />
+        </Field>
+      </div>
 
-      <Field label="Teléfonos">
-        <div className="flex flex-col gap-2">
-          {form.telefonos.map((t, idx) => (
-            <div key={t.id ?? idx} className="flex items-center gap-1.5">
-              <Input
-                value={t.telefono}
-                onChange={(e) => updateTelefono(idx, { telefono: e.target.value })}
-                placeholder="+57 300…"
-                className="flex-1"
-              />
-              <Input
-                value={t.etiqueta ?? ""}
-                onChange={(e) => updateTelefono(idx, { etiqueta: e.target.value })}
-                placeholder="Etiqueta (ej. oficina)"
-                className="w-[160px]"
-              />
-              <button
-                type="button"
-                onClick={() => removeTelefono(idx)}
-                aria-label="Quitar teléfono"
-                className="flex cursor-pointer items-center rounded border-none bg-transparent p-1.5 text-text-2 hover:bg-gray-light hover:text-red"
-              >
-                <X size={14} strokeWidth={2} />
-              </button>
-            </div>
-          ))}
-          <Button size="sm" icon={Plus} onClick={addTelefono} className="self-start">
-            Agregar teléfono
-          </Button>
-        </div>
-      </Field>
-
-      <Field label="Notas internas">
-        <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Historial, condiciones…" />
-      </Field>
-    </Modal>
+      <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface p-4">
+        <Button onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={handleSave}>
+          {editing ? "Guardar cambios" : "Registrar cliente"}
+        </Button>
+      </div>
+    </Drawer>
   );
 }

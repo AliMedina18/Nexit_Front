@@ -2,7 +2,7 @@
 
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import clsx from "clsx";
-import { Search, Star, X, type LucideIcon } from "lucide-react";
+import { LayoutGrid, Rows3, Search, Star, X, type LucideIcon } from "lucide-react";
 import { initials } from "@/lib/format";
 import { COUNTRY_BADGE_COLORS } from "@/lib/constants";
 import { countryCode } from "@/lib/geo";
@@ -122,14 +122,19 @@ export function Avatar({
 /* Stars (SVG rating)                                                          */
 /* -------------------------------------------------------------------------- */
 export function Stars({ n, size = 13 }: { n: number; size?: number }) {
+  // Verdes (#00A85A relleno / #C9C6BE contorno vacío) -- ported del HTML
+  // aprobado (kPromStars en el prototipo). Antes quedaron en naranja
+  // (#EF9F27) por error; el color real de la calificación en todo el
+  // sistema es el mismo verde oscuro que usa "Valoración promedio".
   return (
     <span className="inline-flex items-center gap-[1px]" aria-label={`${n} de 5`}>
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
           size={size}
-          strokeWidth={0}
-          fill={i <= n ? "#EF9F27" : "var(--border-strong)"}
+          strokeWidth={i <= n ? 0 : 1.5}
+          fill={i <= n ? "#00A85A" : "none"}
+          stroke={i <= n ? "#00A85A" : "#C9C6BE"}
         />
       ))}
     </span>
@@ -179,9 +184,45 @@ export function EmptyState({
 /* -------------------------------------------------------------------------- */
 export function StatCard({ n, label }: { n: ReactNode; label: string }) {
   return (
-    <div className="rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3">
-      <div className="text-2xl font-semibold leading-none tracking-tight">{n}</div>
-      <div className="mt-1 text-[11px] text-text-2">{label}</div>
+    <div className="min-h-[80px] rounded-[var(--radius-md)] border border-border bg-surface px-4 py-3.5">
+      <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-text-2">{label}</div>
+      <div className="mt-1.5 text-[28px] font-semibold leading-none tracking-[-0.035em]">{n}</div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* View toggle (Tarjetas / Tabla)                                              */
+/* -------------------------------------------------------------------------- */
+/** Alterna entre vista de tarjetas y tabla en las 3 listas de base de datos
+ * (Clientes/Proveedores/Proyectos) -- ported 2026-09-02 del HTML aprobado. */
+export function ViewToggle({ view, onChange }: { view: "cards" | "table"; onChange: (v: "cards" | "table") => void }) {
+  return (
+    <div className="inline-flex items-center gap-0.5 rounded-[var(--radius-lg)] border border-border bg-gray-light p-0.5">
+      <button
+        type="button"
+        onClick={() => onChange("cards")}
+        aria-pressed={view === "cards"}
+        className={clsx(
+          "flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-[13px] font-medium transition-colors",
+          view === "cards" ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text",
+        )}
+      >
+        <LayoutGrid size={14} strokeWidth={1.8} />
+        Tarjetas
+      </button>
+      <button
+        type="button"
+        onClick={() => onChange("table")}
+        aria-pressed={view === "table"}
+        className={clsx(
+          "flex items-center gap-1.5 rounded-[3px] px-2.5 py-1.5 text-[13px] font-medium transition-colors",
+          view === "table" ? "bg-surface text-text shadow-sm" : "text-text-2 hover:text-text",
+        )}
+      >
+        <Rows3 size={14} strokeWidth={1.8} />
+        Tabla
+      </button>
     </div>
   );
 }

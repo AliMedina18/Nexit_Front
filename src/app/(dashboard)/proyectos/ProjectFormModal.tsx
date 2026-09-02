@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Users, X } from "lucide-react";
-import { Modal } from "@/components/ui/Modal";
+import { Drawer, DrawerCloseButton } from "@/components/ui/Drawer";
 import { Button } from "@/components/ui/primitives";
 import { Field, FieldGroup, Input, Row, Select, Textarea } from "@/components/ui/form";
 import { useAuthStore } from "@/store/auth-store";
@@ -196,19 +196,20 @@ export function ProjectFormModal({
   }
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title={editing ? "Editar proyecto" : "Nuevo proyecto"}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" onClick={handleSave}>
-            Guardar proyecto
-          </Button>
-        </>
-      }
-    >
+    <Drawer open={open} onClose={onClose}>
+      <div className="sticky top-0 z-[1] flex items-start justify-between gap-3.5 border-b border-border bg-surface p-5">
+        <div className="min-w-0">
+          <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">
+            {editing ? "EDITAR PROYECTO" : "REGISTRAR PROYECTO"}
+          </div>
+          <h2 className="truncate text-[19px] font-semibold leading-tight">
+            {editing ? "Editar datos del proyecto" : "Datos del nuevo proyecto"}
+          </h2>
+        </div>
+        <DrawerCloseButton onClose={onClose} />
+      </div>
+
+      <div className="flex-1 p-5">
       <Field label="Nombre del proyecto" required error={errors.nombre}>
         <Input
           value={form.nombre}
@@ -385,6 +386,14 @@ export function ProjectFormModal({
       <Field label="Proveedores trabajando en este proyecto">
         <ProviderPicker providers={providers} selectedIds={selectedIds} onToggle={toggleProvider} />
       </Field>
-    </Modal>
+      </div>
+
+      <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface p-4">
+        <Button onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={handleSave}>
+          {editing ? "Guardar cambios" : "Registrar proyecto"}
+        </Button>
+      </div>
+    </Drawer>
   );
 }

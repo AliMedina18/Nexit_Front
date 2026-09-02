@@ -17,5 +17,12 @@ export default defineConfig({
     include: ["src/**/*.test.{ts,tsx}"],
     exclude: ["e2e/**", "node_modules/**"],
     css: false,
+    // "threads" en vez del default "forks" -- en Windows, lanzar procesos nuevos del
+    // sistema operativo (forks) suele colgarse por el antivirus corporativo o por
+    // OneDrive sincronizando node_modules, con el error "Timeout waiting for worker
+    // to respond" en TODOS los archivos de prueba a la vez. "threads" corre las
+    // pruebas en hilos dentro del mismo proceso de Node, sin ese problema, y funciona
+    // igual de bien en Linux/macOS/CI.
+    pool: "threads",
   },
 });

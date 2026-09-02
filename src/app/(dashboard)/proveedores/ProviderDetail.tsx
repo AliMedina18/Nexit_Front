@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, ExternalLink, Pencil, Upload, UserMinus, UserPlus, X } from "lucide-react";
+import { Download, ExternalLink, Mail, MessageCircle, Pencil, Upload, UserMinus, UserPlus, X } from "lucide-react";
 import { Avatar, Badge, Button, CountryBadge, Stars, Tag } from "@/components/ui/primitives";
 import { Spinner } from "@/components/ui/Spinner";
 import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
-import { Drawer, DrawerCloseButton, DrawerHeader, DrawerSection, KeyValue, NoteBox } from "@/components/ui/Drawer";
+import { Drawer, DrawerBox, DrawerCloseButton, DrawerHeader, DrawerSection, KeyValue, NoteBox } from "@/components/ui/Drawer";
 import { PROVIDER_STATUS_COLORS, statusColor } from "@/lib/constants";
 import { fileIcon, fmtSize } from "@/lib/format";
 import { toSafeHref } from "@/lib/url-safety";
@@ -51,6 +51,30 @@ export function ProviderDetail({
     .filter((n): n is string => Boolean(n));
   const yoSoyColaborador = Boolean(user && provider.colaboradores.some((c) => c.usuarioId === user.id));
 
+  /** Número para WhatsApp (solo dígitos, con código de país incluido si el
+   * proveedor lo guardó así) -- prefiere un teléfono etiquetado "WhatsApp"
+   * o "Celular"; si no hay ninguno etiquetado así, usa el primero de la
+   * lista. Devuelve null si no hay ningún teléfono registrado. */
+  const numeroWhatsApp = (() => {
+    if (provider.telefonos.length === 0) return null;
+    const preferido =
+      provider.telefonos.find((t) => /whatsapp/i.test(t.etiqueta || "")) ??
+      provider.telefonos.find((t) => /celular|m[oó]vil/i.test(t.etiqueta || "")) ??
+      provider.telefonos[0];
+    const digitos = preferido.telefono.replace(/\D/g, "");
+    return digitos || null;
+  })();
+
+  function abrirWhatsApp() {
+    if (!numeroWhatsApp) return;
+    window.open(`https://wa.me/${numeroWhatsApp}`, "_blank", "noreferrer");
+  }
+
+  function abrirCorreo() {
+    if (!provider || !provider.email) return;
+    window.location.href = `mailto:${provider.email}`;
+  }
+
   function copyContact() {
     if (!provider) return;
     const telefonos = provider.telefonos.map((t) => t.telefono).join(", ");
@@ -84,28 +108,23 @@ export function ProviderDetail({
       </DrawerHeader>
 
       <div className="flex-1 p-5">
-        <DrawerSection title="Evaluación" />
-        {typeof provider.score === "number" ? <Stars n={provider.score} size={18} /> : <span className="text-xs text-text-3">Sin score</span>}
-        <div className="mt-2">
+        {/* Fila de pills arriba (estado + valoración + cobertura + presupuesto)
+            -- ported del HTML aprobado: en el mockup estos 4 datos van juntos,
+            arriba del todo, no repartidos en filas de Clave/Valor sueltas. */}
+        <div className="flex flex-wrap items-center gap-1.5">
           <Badge bg={sc.bg} color={sc.c}>
             {provider.estado}
           </Badge>
+          {typeof provider.score === "number" && (
+            <Tag className="flex items-center gap-1">
+              <Stars n={provider.score} size={12} /> {provider.score}/5
+            </Tag>
+          )}
+          {provider.cobertura && <Tag>Cobertura: {provider.cobertura}</Tag>}
+          {provider.presupuesto && <Tag>Presupuesto: {provider.presupuesto}</Tag>}
         </div>
 
-        <DrawerSection title="Ubicación" />
-        <KeyValue
-          k="País"
-          v={
-            <span className="flex items-center gap-1.5">
-              <CountryBadge pais={paisNombre} /> {paisNombre || "—"}
-            </span>
-          }
-        />
-        <KeyValue k="Región" v={regionNombre || "—"} />
-        <KeyValue k="Ciudad" v={ciudadNombre || "—"} />
-        <KeyValue k="Cobertura" v={provider.cobertura || "—"} />
-
-        <DrawerSection
+        <DrawerBox
           title="Contacto"
           action={
             <button
@@ -115,22 +134,40 @@ export function ProviderDetail({
               Copiar
             </button>
           }
-        />
-        <KeyValue k="Contacto" v={provider.contacto || "—"} />
-        <KeyValue k="Cargo" v={provider.cargoContacto || "—"} />
-        <KeyValue k="Email" v={provider.email || "—"} />
-        {provider.telefonos.length > 0 ? (
-          provider.telefonos.map((t, i) => <KeyValue key={t.id ?? i} k={t.etiqueta || "Teléfono"} v={t.telefono} />)
-        ) : (
-          <KeyValue k="Teléfono" v="—" />
+        >
+          <KeyValue k="Persona" v={provider.contacto || "—"} />
+          {provider.cargoContacto && <KeyValue k="Cargo" v={provider.cargoContacto} />}
+          {provider.telefonos.length > 0 ? (
+            provider.telefonos.map((t, i) => <KeyValue key={t.id ?? i} k={t.etiqueta || "Teléfono"} v={t.telefono} />)
+          ) : (
+            <KeyValue k="Teléfono" v="—" />
+          )}
+          <KeyValue k="Correo" v={provider.email || "—"} />
+        </DrawerBox>
+
+        <DrawerBox title="Ubicación">
+          <KeyValue
+            k="País"
+            v={
+              <span className="flex items-center gap-1.5">
+                <CountryBadge pais={paisNombre} /> {paisNombre || "—"}
+              </span>
+            }
+          />
+          <KeyValue k="Departamento" v={regionNombre || "—"} />
+          <KeyValue k="Ciudad" v={ciudadNombre || "—"} />
+        </DrawerBox>
+
+        {(provider.aforo != null || provider.costoReferencia) && (
+          <DrawerBox title="Detalles adicionales">
+            {provider.aforo != null && <KeyValue k="Aforo" v={String(provider.aforo)} />}
+            {provider.costoReferencia && <KeyValue k="Costo de referencia" v={provider.costoReferencia} />}
+          </DrawerBox>
         )}
-        <KeyValue k="Presupuesto" v={provider.presupuesto || "—"} />
-        <KeyValue k="Aforo" v={provider.aforo != null ? String(provider.aforo) : "—"} />
-        <KeyValue k="Costo de referencia" v={provider.costoReferencia || "—"} />
 
         {serviciosNombres.length > 0 && (
           <>
-            <DrawerSection title="Servicios" />
+            <DrawerSection title="Servicios que presta" />
             <div className="flex flex-wrap gap-1.5">
               {serviciosNombres.map((s) => (
                 <Tag key={s}>{s}</Tag>
@@ -157,11 +194,33 @@ export function ProviderDetail({
           </>
         )}
 
-        <DrawerSection title="Archivos y links" />
+        <DrawerSection title="Archivos y enlaces" />
         <AttachmentsSection proveedorId={provider.id} />
       </div>
 
+      {/* WhatsApp/Correo abren de una vez el chat o el cliente de correo con
+          este proveedor (ported del HTML aprobado, pero acá sí funcionan:
+          el mockup los dibuja solo como decoración) -- se deshabilitan si
+          el proveedor no tiene teléfono o correo guardado. Editar/Eliminar
+          se mantienen porque son las acciones reales que ya existían. */}
       <div className="flex flex-wrap gap-2 border-t border-border p-4">
+        <Button
+          variant="primary"
+          icon={MessageCircle}
+          onClick={abrirWhatsApp}
+          disabled={!numeroWhatsApp}
+          title={numeroWhatsApp ? "Escribir por WhatsApp" : "Este proveedor no tiene teléfono guardado"}
+        >
+          WhatsApp
+        </Button>
+        <Button
+          icon={Mail}
+          onClick={abrirCorreo}
+          disabled={!provider.email}
+          title={provider.email ? "Escribir un correo" : "Este proveedor no tiene correo guardado"}
+        >
+          Correo
+        </Button>
         <Button variant="primary" icon={Pencil} onClick={onEdit}>
           Editar
         </Button>

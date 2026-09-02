@@ -2,11 +2,12 @@
 
 import type {
   InputHTMLAttributes,
+  ReactElement,
   ReactNode,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import { useState } from "react";
+import { cloneElement, isValidElement, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import clsx from "clsx";
 
@@ -35,12 +36,25 @@ export function Field({
   children: ReactNode;
   hint?: ReactNode;
 }) {
+  // Mantiene la validación junto al control, como en el HTML aprobado: el
+  // mensaje explica el error y el borde rojo identifica de inmediato el campo
+  // que requiere atención. `children` puede ser un contenedor (por ejemplo,
+  // la lista de teléfonos), por lo que solo se inyecta la prop en controles
+  // que acepten `invalid`.
+  const control =
+    error && isValidElement(children)
+      ? cloneElement(children as ReactElement<{ invalid?: boolean; "aria-invalid"?: boolean }>, {
+          invalid: true,
+          "aria-invalid": true,
+        })
+      : children;
+
   return (
     <div className="mb-3.5">
       <label className="mb-1.5 block text-xs font-medium text-text-2">
         {label} {required && <span className="text-red">*</span>}
       </label>
-      {children}
+      {control}
       {hint}
       {error && <div className="mt-1 text-xs text-red">{error}</div>}
     </div>
@@ -97,7 +111,30 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
 
 export function Row({ cols = 2, children }: { cols?: 2 | 3; children: ReactNode }) {
   return (
-    <div className={clsx("grid gap-3", cols === 2 ? "grid-cols-2" : "grid-cols-3")}>{children}</div>
+    <div
+      className={clsx(
+        "grid grid-cols-1 gap-3",
+        cols === 2 ? "min-[1001px]:grid-cols-2" : "min-[1001px]:grid-cols-3",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Encabezado de sección numerado ("01 Quién es", "02 Dónde está"...) usado
+ * en los drawers de registro (Cliente/Proveedor/Proyecto) -- ported
+ * 2026-09-02 del HTML aprobado. Medidas con getComputedStyle: número 12px
+ * IBM Plex Mono en #00a85a, título 19px/600 Archivo, borde inferior
+ * var(--border) con 11px de padding.
+ */
+export function FormSection({ n, title }: { n: string; title: string }) {
+  return (
+    <div className="mb-3.5 flex items-baseline gap-2 border-b border-border pb-2.5">
+      <span className="font-mono text-xs text-[#00a85a]">{n}</span>
+      <h3 className="text-[19px] font-semibold leading-tight tracking-[-0.025em] text-text">{title}</h3>
+    </div>
   );
 }
 
