@@ -22,7 +22,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * ningún cambio visual al hacer clic/tap (pedido explícito: "el cambio de
  * color en los botones al presionarlos"). */
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: "bg-teal-mid text-white hover:bg-teal active:bg-black",
+  primary: "bg-teal-mid text-white hover:bg-green hover:text-text active:bg-teal active:text-white",
   ghost: "bg-surface text-text border border-border hover:bg-gray-light hover:border-border-strong active:bg-border",
   danger: "bg-red-light text-red border border-transparent hover:opacity-85 active:opacity-70",
 };
