@@ -355,7 +355,7 @@ export default function LoginPage() {
       </div>
 
       {/* Panel derecho -- el formulario real, paso a paso */}
-      <div className="flex items-center justify-center overflow-y-auto bg-bg p-6">
+      <div className={`flex items-center justify-center overflow-y-auto bg-bg p-6 ${styles.formPanel}`}>
         <div className="w-full max-w-[380px] py-8">
           <div className="mb-8">
             <Logo height={30} />

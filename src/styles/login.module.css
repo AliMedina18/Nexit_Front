@@ -105,6 +105,20 @@
   border: 1px solid #1e1e1e;
 }
 
+.formPanel :global(.mt-1.text-xs.text-red) {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: center;
+  margin: 14px 0 0;
+  border-left: 2px solid #a32d2d;
+  background: #fdecec;
+  padding: 10px 12px;
+  color: #8a2525;
+  font-size: 13px;
+  line-height: normal;
+}
+
 /* Flechita animada de los botones de enviar/iniciar sesión -- pedido
    explícito: "que la flechita tenga una animación que se mueva". No viene
    del mockup (el mockup no anima esa flecha en reposo); es una idea propia
