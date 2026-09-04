@@ -25,6 +25,10 @@ export interface ClienteTelefono {
 export interface ClienteInput {
   nombre: string;
   sector?: string | null;
+  paisId?: string | null;
+  regionId?: string | null;
+  ciudadId?: string | null;
+  estado: string; // "Activo" | "Prospecto" | "Inactivo"
   ciudad?: string | null;
   direccion?: string | null;
   web?: string | null;
@@ -47,6 +51,28 @@ export interface ClientePrioridad {
   nombre: string;
   puntaje: number;
   razones: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Adjuntos de cliente
+// ---------------------------------------------------------------------------
+
+export interface ClienteAdjuntoInput {
+  tipo: string; // "link" | "archivo"
+  nombre: string;
+  url?: string | null;
+  storagePath?: string | null;
+  meta?: string | null;
+  contentType?: string | null;
+  tamanoBytes?: number | null;
+  fecha?: string | null;
+}
+
+export interface ClienteAdjunto extends ClienteAdjuntoInput {
+  id: string;
+  clienteId: string;
+  fecha: string;
+  createdAt: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +195,28 @@ export interface ProyectoPrioridad {
   nombre: string;
   puntaje: number;
   razones: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Adjuntos de proyecto
+// ---------------------------------------------------------------------------
+
+export interface ProyectoAdjuntoInput {
+  tipo: string; // "link" | "archivo"
+  nombre: string;
+  url?: string | null;
+  storagePath?: string | null;
+  meta?: string | null;
+  contentType?: string | null;
+  tamanoBytes?: number | null;
+  fecha?: string | null;
+}
+
+export interface ProyectoAdjunto extends ProyectoAdjuntoInput {
+  id: string;
+  proyectoId: string;
+  fecha: string;
+  createdAt: string;
 }
 
 export interface SeguimientoProyectoInput {

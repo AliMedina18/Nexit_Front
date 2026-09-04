@@ -1,19 +1,34 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Users, X } from "lucide-react";
-import { Drawer, DrawerCloseButton } from "@/components/ui/Drawer";
-import { Button } from "@/components/ui/primitives";
-import { Field, FieldGroup, Input, Row, Select, Textarea } from "@/components/ui/form";
+import { X } from "lucide-react";
+import { Drawer, FormDrawerBody, FormDrawerFooter, FormDrawerHeader, FormDrawerSection } from "@/components/ui/Drawer";
+import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
+import { EntityAttachments } from "@/components/ui/EntityAttachments";
+import { Dropdown, type DropdownGroup } from "@/components/ui/primitives";
+import { Field, Input, Row, Textarea } from "@/components/ui/form";
+import { parseCSVFirstRow } from "@/lib/csv";
 import { useAuthStore } from "@/store/auth-store";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useClientesStore } from "@/store/clientes-store";
+import { useUiStore } from "@/store/ui-store";
+import { proyectoAdjuntosApi } from "@/services/api/proyecto-adjuntos-service";
 import { usuariosApi } from "@/services/api/usuarios-service";
 import type { Proveedor, Proyecto, ProyectoEquipoMiembro, ProyectoInput, Usuario } from "@/types/api";
 import { ProviderPicker } from "./ProviderPicker";
 
 const BRIEF_ESTADOS = ["Pendiente por enviar", "Entregado, a espera de respuesta", "Requiere ajustes", "Aprobado"];
 const PROPUESTA_ESTADOS = ["Pendiente", "Enviada", "Aprobada", "Rechazada"];
+// Listas base del mockup aprobado -- el valor ya guardado en un proyecto viejo (si no está
+// en esta lista) se agrega igual como opción extra, para no perderlo por venir de antes de
+// que este campo se volviera un dropdown cerrado.
+const TIPO_BASE = ["Corporativo", "Evento social"];
+const PRIORIDAD_BASE = ["Alta", "Media", "Baja"];
+const SEDE_BASE = ["Bogotá", "Ciudad de México"];
+
+function withCurrent(base: string[], current: string): string[] {
+  return current && !base.includes(current) ? [...base, current] : base;
+}
 
 interface FormState {
   nombre: string;
@@ -63,22 +78,28 @@ export function ProjectFormModal({
   open,
   onClose,
   onSave,
+  onDelete,
   editing,
   providers,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (input: ProyectoInput) => void;
+  /** Solo se usa (y solo se muestra "Eliminar") cuando `editing` no es null. */
+  onDelete?: () => void;
   editing: Proyecto | null;
   providers: Proveedor[];
 }) {
   const user = useAuthStore((s) => s.user);
+  const pushToast = useUiStore((s) => s.pushToast);
   const { estadosProyecto, fasesProyecto, fetchBase } = useCatalogosStore();
   const { items: clientes, fetchAll: fetchClientes } = useClientesStore();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [gerentes, setGerentes] = useState<Usuario[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [miembroRolDraft, setMiembroRolDraft] = useState("");
+  const [miembroNombreDraft, setMiembroNombreDraft] = useState("");
 
   const puedeAsignarGerente = user?.rol === "admin" || user?.rol === "super_admin";
 
@@ -122,6 +143,8 @@ export function ProjectFormModal({
       setSelectedIds(new Set());
     }
     setErrors({});
+    setMiembroRolDraft("");
+    setMiembroNombreDraft("");
   }, [open, editing]);
 
   const estadosPorFase = useMemo(() => {
@@ -131,6 +154,15 @@ export function ProjectFormModal({
       estados: estadosProyecto.filter((e) => e.fase === f.fase).sort((a, b) => a.orden - b.orden),
     }));
   }, [fasesProyecto, estadosProyecto]);
+
+  const estadoGroups: DropdownGroup[] = useMemo(
+    () =>
+      estadosPorFase.map(({ fase, estados }) => ({
+        label: `Fase ${fase.fase} · ${fase.nombre}`,
+        options: estados.map((e) => ({ value: e.id, label: e.nombre })),
+      })),
+    [estadosPorFase],
+  );
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -146,14 +178,10 @@ export function ProjectFormModal({
   }
 
   function addMiembro() {
-    set("equipo", [...form.equipo, { rol: "", nombre: "" }]);
-  }
-
-  function updateMiembro(idx: number, patch: Partial<ProyectoEquipoMiembro>) {
-    set(
-      "equipo",
-      form.equipo.map((m, i) => (i === idx ? { ...m, ...patch } : m)),
-    );
+    if (!miembroNombreDraft.trim()) return;
+    set("equipo", [...form.equipo, { rol: miembroRolDraft.trim(), nombre: miembroNombreDraft.trim() }]);
+    setMiembroRolDraft("");
+    setMiembroNombreDraft("");
   }
 
   function removeMiembro(idx: number) {
@@ -161,6 +189,52 @@ export function ProjectFormModal({
       "equipo",
       form.equipo.filter((_, i) => i !== idx),
     );
+  }
+
+  /** "Importar datos" -- rellena el formulario desde la primera fila de un CSV. Cliente y
+   * estado se resuelven por nombre contra los catálogos ya cargados; si no hay coincidencia
+   * exacta, el campo se deja tal como estaba (no se limpia). */
+  function handleImportFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const row = parseCSVFirstRow(String(reader.result));
+      if (!row) {
+        pushToast("El archivo no tiene una fila de datos para importar", "danger");
+        return;
+      }
+      const pick = (...keys: string[]) => {
+        for (const key of keys) {
+          const found = Object.keys(row).find((h) => h.trim().toLowerCase() === key);
+          if (found && row[found]) return row[found];
+        }
+        return undefined;
+      };
+      const clienteNombre = pick("cliente", "empresa");
+      const clienteMatch = clienteNombre
+        ? clientes.find((c) => c.nombre.toLowerCase() === clienteNombre.toLowerCase())
+        : undefined;
+      const estadoNombre = pick("estado", "estadoproyecto");
+      const estadoMatch = estadoNombre
+        ? estadosProyecto.find((e) => e.nombre.toLowerCase() === estadoNombre.toLowerCase())
+        : undefined;
+      setForm((f) => ({
+        ...f,
+        nombre: pick("nombre", "proyecto") ?? f.nombre,
+        clienteId: clienteMatch ? clienteMatch.id : f.clienteId,
+        contactoProyecto: pick("contacto", "contactoproyecto") ?? f.contactoProyecto,
+        tipoProyecto: pick("tipo", "tipoproyecto") ?? f.tipoProyecto,
+        prioridad: pick("prioridad") ?? f.prioridad,
+        ciudad: pick("ciudad") ?? f.ciudad,
+        sedeNext: pick("sede", "sedenext") ?? f.sedeNext,
+        fechaSolicitud: pick("fechasolicitud") ?? f.fechaSolicitud,
+        fechaEvento: pick("fechaevento", "fecha") ?? f.fechaEvento,
+        estadoId: estadoMatch ? estadoMatch.id : f.estadoId,
+        numeroFactura: pick("factura", "numerofactura") ?? f.numeroFactura,
+        notas: pick("notas") ?? f.notas,
+      }));
+      pushToast("Datos importados. Revisa los campos y guarda.", "info");
+    };
+    reader.readAsText(file);
   }
 
   function handleSave() {
@@ -197,203 +271,248 @@ export function ProjectFormModal({
 
   return (
     <Drawer open={open} onClose={onClose}>
-      <div className="sticky top-0 z-[1] flex items-start justify-between gap-3.5 border-b border-border bg-surface p-5">
-        <div className="min-w-0">
-          <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">
-            {editing ? "EDITAR PROYECTO" : "REGISTRAR PROYECTO"}
-          </div>
-          <h2 className="truncate text-[19px] font-semibold leading-tight">
-            {editing ? "Editar datos del proyecto" : "Datos del nuevo proyecto"}
-          </h2>
-        </div>
-        <DrawerCloseButton onClose={onClose} />
-      </div>
+      <FormDrawerHeader
+        eyebrow={editing ? "Editar proyecto" : "Registrar proyecto"}
+        title={editing ? editing.nombre || "Datos del proyecto" : "Datos del nuevo proyecto"}
+        onClose={onClose}
+        onImportFile={handleImportFile}
+      />
 
-      <div className="flex-1 p-5">
-      <Field label="Nombre del proyecto" required error={errors.nombre}>
-        <Input
-          value={form.nombre}
-          onChange={(e) => set("nombre", e.target.value)}
-          placeholder="Lanzamiento Marca X, Activación Ciudad Y…"
-        />
-      </Field>
-
-      <Row cols={2}>
-        <Field label="Cliente">
-          <Select value={form.clienteId} onChange={(e) => set("clienteId", e.target.value)}>
-            <option value="">Sin cliente</option>
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Contacto del proyecto">
-          <Input
-            value={form.contactoProyecto}
-            onChange={(e) => set("contactoProyecto", e.target.value)}
-            placeholder="Nombre del contacto en el cliente"
-          />
-        </Field>
-      </Row>
-
-      <Row cols={2}>
-        <Field label="Fecha de solicitud">
-          <Input type="date" value={form.fechaSolicitud} onChange={(e) => set("fechaSolicitud", e.target.value)} />
-        </Field>
-        <Field label="Fecha del evento">
-          <Input type="date" value={form.fechaEvento} onChange={(e) => set("fechaEvento", e.target.value)} />
-        </Field>
-      </Row>
-
-      <Row cols={2}>
-        <Field label="Tipo de proyecto">
-          <Input value={form.tipoProyecto} onChange={(e) => set("tipoProyecto", e.target.value)} placeholder="Ej. Activación BTL" />
-        </Field>
-        <Field label="Prioridad">
-          <Input value={form.prioridad} onChange={(e) => set("prioridad", e.target.value)} placeholder="Ej. Alta" />
-        </Field>
-      </Row>
-
-      <Row cols={2}>
-        <Field label="Ciudad">
-          <Input value={form.ciudad} onChange={(e) => set("ciudad", e.target.value)} placeholder="Ciudad del evento" />
-        </Field>
-        <Field label="Sede Next">
-          <Input value={form.sedeNext} onChange={(e) => set("sedeNext", e.target.value)} placeholder="Sede que lo maneja" />
-        </Field>
-      </Row>
-
-      <FieldGroup
-        title={
-          <span className="inline-flex items-center gap-1.5">
-            <Users size={12} strokeWidth={2} /> Equipo del proyecto
-          </span>
-        }
-      >
-        <div className="flex flex-col gap-2">
-          {form.equipo.map((m, idx) => (
-            <div key={m.id ?? idx} className="flex items-center gap-1.5">
-              <Input
-                value={m.rol}
-                onChange={(e) => updateMiembro(idx, { rol: e.target.value })}
-                placeholder="Rol (ej. Ejecutivo)"
-                className="w-[160px]"
-              />
-              <Input
-                value={m.nombre}
-                onChange={(e) => updateMiembro(idx, { nombre: e.target.value })}
-                placeholder="Nombre"
-                className="flex-1"
-              />
-              <button
-                type="button"
-                onClick={() => removeMiembro(idx)}
-                aria-label="Quitar miembro"
-                className="flex cursor-pointer items-center rounded border-none bg-transparent p-1.5 text-text-2 hover:bg-border hover:text-red"
-              >
-                <X size={14} strokeWidth={2} />
-              </button>
-            </div>
-          ))}
-          <Button size="sm" icon={Plus} onClick={addMiembro} className="self-start">
-            Agregar miembro
-          </Button>
-        </div>
-      </FieldGroup>
-
-      {puedeAsignarGerente && (
-        <Field label="Gerente responsable" hint={<div className="mt-1 text-[11px] text-text-3">Si lo dejas vacío, se te asigna a ti.</div>}>
-          <Select value={form.gerenteId} onChange={(e) => set("gerenteId", e.target.value)}>
-            <option value="">Auto-asignar</option>
-            {gerentes.map((g) => (
-              <option key={g.id} value={g.id}>
-                {g.nombre} {g.apellido}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      )}
-
-      <Row cols={2}>
-        <Field label="Estado" required error={errors.estadoId}>
-          <Select value={form.estadoId} onChange={(e) => set("estadoId", e.target.value)}>
-            <option value="">Seleccionar…</option>
-            {estadosPorFase.map(({ fase, estados }) => (
-              <optgroup key={fase.fase} label={`Fase ${fase.fase} · ${fase.nombre}`}>
-                {estados.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.nombre}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </Select>
-        </Field>
-        <Field label="% de avance">
-          <Input
-            type="number"
-            min={0}
-            max={100}
-            value={form.porcentajeAvance}
-            onChange={(e) => set("porcentajeAvance", Number(e.target.value))}
-          />
-        </Field>
-      </Row>
-
-      <Row cols={2}>
-        <Field label="Estado del brief">
-          <Select value={form.estadoBrief} onChange={(e) => set("estadoBrief", e.target.value)}>
-            {BRIEF_ESTADOS.map((b) => (
-              <option key={b}>{b}</option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Estado de la propuesta">
-          <Select value={form.propuestaEstado} onChange={(e) => set("propuestaEstado", e.target.value)}>
-            {PROPUESTA_ESTADOS.map((p) => (
-              <option key={p}>{p}</option>
-            ))}
-          </Select>
-        </Field>
-      </Row>
-
-      <FieldGroup title="Facturación">
-        <Row cols={2}>
-          <Field label="N.º de factura">
-            <Input value={form.numeroFactura} onChange={(e) => set("numeroFactura", e.target.value)} placeholder="Ej. FAC-0001" />
+      <FormDrawerBody>
+        <FormDrawerSection number="01" title="Qué es">
+          <Field label="Nombre del proyecto" required error={errors.nombre}>
+            <Input
+              value={form.nombre}
+              onChange={(e) => set("nombre", e.target.value)}
+              placeholder="Ej. Lanzamiento Marca X"
+            />
           </Field>
+
+          <div className="grid grid-cols-1 gap-3 min-[1001px]:grid-cols-[1.6fr_1fr]">
+            <Field label="Cliente">
+              <Dropdown
+                value={form.clienteId}
+                onChange={(v) => set("clienteId", v)}
+                placeholder="Elige un cliente"
+                options={clientes.map((c) => ({ value: c.id, label: c.nombre }))}
+              />
+            </Field>
+            <Field label="Fecha del evento">
+              <Input type="date" value={form.fechaEvento} onChange={(e) => set("fechaEvento", e.target.value)} />
+            </Field>
+          </div>
+
+          <Row cols={2}>
+            <Field label="Tipo de proyecto">
+              <Dropdown
+                value={form.tipoProyecto}
+                onChange={(v) => set("tipoProyecto", v)}
+                placeholder="Elige un tipo"
+                options={withCurrent(TIPO_BASE, form.tipoProyecto).map((t) => ({ value: t, label: t }))}
+              />
+            </Field>
+            <Field label="Prioridad">
+              <Dropdown
+                value={form.prioridad}
+                onChange={(v) => set("prioridad", v)}
+                placeholder="Elige prioridad"
+                options={withCurrent(PRIORIDAD_BASE, form.prioridad).map((p) => ({ value: p, label: p }))}
+              />
+            </Field>
+          </Row>
+
+          <Row cols={2}>
+            <Field label="Ciudad del evento">
+              <Input value={form.ciudad} onChange={(e) => set("ciudad", e.target.value)} placeholder="Bogotá" />
+            </Field>
+            <Field label="Sede de Next a cargo">
+              <Dropdown
+                value={form.sedeNext}
+                onChange={(v) => set("sedeNext", v)}
+                placeholder="Elige sede"
+                options={withCurrent(SEDE_BASE, form.sedeNext).map((s) => ({ value: s, label: s }))}
+              />
+            </Field>
+          </Row>
+
+          <Field label="Fecha de solicitud">
+            <Input type="date" value={form.fechaSolicitud} onChange={(e) => set("fechaSolicitud", e.target.value)} />
+          </Field>
+          <Field label="Contacto en el cliente">
+            <Input
+              value={form.contactoProyecto}
+              onChange={(e) => set("contactoProyecto", e.target.value)}
+              placeholder="Nombre y apellido"
+            />
+          </Field>
+        </FormDrawerSection>
+
+        <FormDrawerSection number="02" title="Estado">
+          <Row cols={2}>
+            <Field label="Estado del proyecto" required error={errors.estadoId}>
+              <Dropdown
+                value={form.estadoId}
+                onChange={(v) => set("estadoId", v)}
+                placeholder="Elige un estado"
+                groups={estadoGroups}
+              />
+            </Field>
+            <Field label="Estado del brief">
+              <Dropdown
+                value={form.estadoBrief}
+                onChange={(v) => set("estadoBrief", v || BRIEF_ESTADOS[0])}
+                placeholder="Elige un estado"
+                options={BRIEF_ESTADOS.map((b) => ({ value: b, label: b }))}
+              />
+            </Field>
+          </Row>
+
+          <div className="grid grid-cols-1 gap-3 min-[1001px]:grid-cols-2 min-[1001px]:items-end">
+            <Field label="Estado de la propuesta">
+              <Dropdown
+                value={form.propuestaEstado}
+                onChange={(v) => set("propuestaEstado", v || PROPUESTA_ESTADOS[0])}
+                placeholder="Elige un estado"
+                options={PROPUESTA_ESTADOS.map((p) => ({ value: p, label: p }))}
+              />
+            </Field>
+            <Field label={`Avance (${form.porcentajeAvance}%)`}>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={form.porcentajeAvance}
+                onChange={(e) => set("porcentajeAvance", Number(e.target.value))}
+                className="h-[46px] w-full cursor-pointer accent-teal-mid"
+              />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 min-[1001px]:grid-cols-[1.6fr_auto] min-[1001px]:items-end">
+            <Field label="N.º de factura">
+              <Input value={form.numeroFactura} onChange={(e) => set("numeroFactura", e.target.value)} placeholder="Ej. FAC-2026-0000" />
+            </Field>
+            <label className="mb-3.5 flex h-[46px] cursor-pointer items-center gap-2 whitespace-nowrap px-1 text-sm font-medium text-text">
+              <input
+                type="checkbox"
+                checked={form.pagado}
+                onChange={(e) => set("pagado", e.target.checked)}
+                className="h-4 w-4 cursor-pointer accent-teal-mid"
+              />
+              Pagado
+            </label>
+          </div>
           <Field label="Fecha de pago">
             <Input type="date" value={form.fechaPago} onChange={(e) => set("fechaPago", e.target.value)} />
           </Field>
-        </Row>
-        <label className="flex cursor-pointer items-center gap-2 text-[13px]">
-          <input
-            type="checkbox"
-            checked={form.pagado}
-            onChange={(e) => set("pagado", e.target.checked)}
-            className="h-[15px] w-[15px] cursor-pointer accent-teal-mid"
-          />
-          Pagado
-        </label>
-      </FieldGroup>
+        </FormDrawerSection>
 
-      <Field label="Notas">
-        <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Detalles, alcance, condiciones…" />
-      </Field>
+        <FormDrawerSection number="03" title="Equipo">
+          <Field label="Miembros del equipo">
+            <div className="flex flex-col gap-2">
+              {form.equipo.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {form.equipo.map((m, idx) => (
+                    <span
+                      key={m.id ?? idx}
+                      className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
+                    >
+                      {m.rol ? `${m.rol}: ` : ""}
+                      {m.nombre}
+                      <button
+                        type="button"
+                        onClick={() => removeMiembro(idx)}
+                        aria-label="Quitar miembro"
+                        className="flex h-[18px] w-[18px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-text-2 hover:bg-black/10 hover:text-red"
+                      >
+                        <X size={11} strokeWidth={2.4} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  value={miembroRolDraft}
+                  onChange={(e) => setMiembroRolDraft(e.target.value)}
+                  placeholder="Rol (ej. Ejecutivo)"
+                  className="w-[160px]"
+                />
+                <Input
+                  value={miembroNombreDraft}
+                  onChange={(e) => setMiembroNombreDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addMiembro();
+                    }
+                  }}
+                  placeholder="Nombre"
+                  className="flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={addMiembro}
+                  className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+                >
+                  Agregar
+                </button>
+              </div>
+            </div>
+          </Field>
 
-      <Field label="Proveedores trabajando en este proyecto">
-        <ProviderPicker providers={providers} selectedIds={selectedIds} onToggle={toggleProvider} />
-      </Field>
-      </div>
+          {puedeAsignarGerente && (
+            <Field label="Gerente responsable" hint={<div className="mt-1.5 text-xs text-text-3">Si lo dejas vacío, se te asigna a ti.</div>}>
+              <Dropdown
+                value={form.gerenteId}
+                onChange={(v) => set("gerenteId", v)}
+                placeholder="Auto-asignar"
+                options={gerentes.map((g) => ({ value: g.id, label: `${g.nombre} ${g.apellido}` }))}
+              />
+            </Field>
+          )}
+        </FormDrawerSection>
 
-      <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface p-4">
-        <Button onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" onClick={handleSave}>
+        <FormDrawerSection number="04" title="Proveedores y notas">
+          <Field label="Proveedores trabajando en este proyecto">
+            <ProviderPicker providers={providers} selectedIds={selectedIds} onToggle={toggleProvider} />
+          </Field>
+          <Field label="Notas internas">
+            <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Detalles, alcance, condiciones…" />
+          </Field>
+        </FormDrawerSection>
+
+        <FormDrawerSection number="05" title="Archivos y enlaces">
+          {editing ? (
+            <EntityAttachments entityId={editing.id} api={proyectoAdjuntosApi} />
+          ) : (
+            <p className="text-sm text-text-3">Guarda el proyecto primero para poder subir archivos o agregar enlaces.</p>
+          )}
+        </FormDrawerSection>
+      </FormDrawerBody>
+
+      <FormDrawerFooter>
+        {editing && onDelete && (
+          <div className="mr-auto">
+            <DeleteOrRequestButton tipoEntidad="proyecto" entidadId={editing.id} nombre={editing.nombre} onDelete={onDelete} />
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-11 cursor-pointer rounded-[var(--radius-md)] border border-border bg-transparent px-4 text-sm font-medium text-text transition-colors hover:border-text hover:bg-bg"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="h-11 cursor-pointer rounded-[var(--radius-md)] bg-teal-mid px-5 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+        >
           {editing ? "Guardar cambios" : "Registrar proyecto"}
-        </Button>
-      </div>
+        </button>
+      </FormDrawerFooter>
     </Drawer>
   );
 }

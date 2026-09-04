@@ -69,3 +69,43 @@
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+
+/* Tarjeta blanca que contiene los selects de filtro y, debajo de un borde,
+   los chips de "Aplicados" -- valores de la tarjeta de filtros del HTML
+   aprobado (padding 14px 18px, radio 4px). Los selects van dentro en su
+   propia rejilla (.filterControls) para que los chips puedan ocupar el
+   ancho completo del panel. */
+.filtersPanel {
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+/* auto-fit (no un número fijo de columnas) porque Clientes usa 2 filtros y
+   Proveedores usa 5 (repeat(5,minmax(130px,1fr)) en el mockup) -- con solo 2
+   ítems, las columnas vacías se colapsan y el resultado es el mismo de
+   antes (dos columnas a lo ancho del panel). */
+.filterControls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .filtersPanel {
+    padding: 12px;
+  }
+  .filterControls {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Rejilla de tarjetas de las listas -- columnas de mínimo 320px que se
+   acomodan solas, igual que `repeat(auto-fill,minmax(320px,1fr))` del
+   mockup, en vez de un número fijo de columnas por breakpoint. */
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}

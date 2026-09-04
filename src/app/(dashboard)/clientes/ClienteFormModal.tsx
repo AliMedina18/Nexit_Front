@@ -1,17 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Plus, Upload, X } from "lucide-react";
-import { Drawer, DrawerCloseButton } from "@/components/ui/Drawer";
-import { Button } from "@/components/ui/primitives";
-import { Field, FormSection, Input, Row, Textarea } from "@/components/ui/form";
-import type { Cliente, ClienteInput, ClienteTelefono } from "@/types/api";
-import { clientesApi } from "@/services/api/clientes-service";
+import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
+import { Drawer, FormDrawerBody, FormDrawerFooter, FormDrawerHeader, FormDrawerSection } from "@/components/ui/Drawer";
+import { Dropdown } from "@/components/ui/primitives";
+import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
+import { EntityAttachments } from "@/components/ui/EntityAttachments";
+import { Field, Input, Row, Textarea } from "@/components/ui/form";
+import { CLIENTE_ESTADOS } from "@/lib/constants";
+import { parseCSVFirstRow } from "@/lib/csv";
+import { clienteAdjuntosApi } from "@/services/api/cliente-adjuntos-service";
+import { useCatalogosStore } from "@/store/catalogos-store";
 import { useUiStore } from "@/store/ui-store";
+import type { Cliente, ClienteInput, ClienteTelefono } from "@/types/api";
 
 interface FormState {
   nombre: string;
   sector: string;
+  paisId: string;
+  regionId: string;
+  ciudadId: string;
+  estado: string;
   ciudad: string;
   direccion: string;
   web: string;
@@ -26,6 +35,10 @@ interface FormState {
 const emptyForm: FormState = {
   nombre: "",
   sector: "",
+  paisId: "",
+  regionId: "",
+  ciudadId: "",
+  estado: CLIENTE_ESTADOS[0],
   ciudad: "",
   direccion: "",
   web: "",
@@ -37,26 +50,32 @@ const emptyForm: FormState = {
   telefonos: [],
 };
 
+const ESTADO_OPTIONS = CLIENTE_ESTADOS.map((e) => ({ value: e, label: e }));
+
 export function ClienteFormModal({
   open,
   onClose,
   onSave,
+  onDelete,
   editing,
-  puedeImportar = false,
-  onImported,
 }: {
   open: boolean;
   onClose: () => void;
   onSave: (input: ClienteInput) => void;
+  /** Solo se usa (y solo se muestra "Eliminar") cuando `editing` no es null: un cliente
+   * nuevo, todavía sin guardar, no tiene nada que eliminar. */
+  onDelete?: () => void;
   editing: Cliente | null;
-  puedeImportar?: boolean;
-  onImported?: () => void;
 }) {
+  const { paises, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } = useCatalogosStore();
+  const pushToast = useUiStore((s) => s.pushToast);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [importing, setImporting] = useState(false);
-  const importRef = useRef<HTMLInputElement>(null);
-  const pushToast = useUiStore((s) => s.pushToast);
+  const [telDraft, setTelDraft] = useState("");
+
+  useEffect(() => {
+    if (open) fetchBase();
+  }, [open, fetchBase]);
 
   useEffect(() => {
     if (!open) return;
@@ -65,6 +84,10 @@ export function ClienteFormModal({
       setForm({
         nombre: editing.nombre,
         sector: editing.sector ?? "",
+        paisId: editing.paisId ?? "",
+        regionId: editing.regionId ?? "",
+        ciudadId: editing.ciudadId ?? "",
+        estado: editing.estado,
         ciudad: editing.ciudad ?? "",
         direccion: editing.direccion ?? "",
         web: editing.web ?? "",
@@ -75,25 +98,40 @@ export function ClienteFormModal({
         notas: editing.notas ?? "",
         telefonos: editing.telefonos.length > 0 ? editing.telefonos : [],
       });
+      if (editing.paisId) fetchRegiones(editing.paisId);
+      if (editing.regionId) fetchCiudades(editing.regionId);
     } else {
       setForm(emptyForm);
     }
     setErrors({});
-  }, [open, editing]);
+    setTelDraft("");
+  }, [open, editing, fetchRegiones, fetchCiudades]);
+
+  const regionOptions = useMemo(() => regionesPorPais[form.paisId] ?? [], [regionesPorPais, form.paisId]);
+  const cityOptions = useMemo(() => ciudadesPorRegion[form.regionId] ?? [], [ciudadesPorRegion, form.regionId]);
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function addTelefono() {
-    set("telefonos", [...form.telefonos, { telefono: "", etiqueta: "" }]);
+  function handlePaisChange(paisId: string) {
+    set("paisId", paisId);
+    set("regionId", "");
+    set("ciudadId", "");
+    if (paisId) fetchRegiones(paisId);
   }
 
-  function updateTelefono(idx: number, patch: Partial<ClienteTelefono>) {
-    set(
-      "telefonos",
-      form.telefonos.map((t, i) => (i === idx ? { ...t, ...patch } : t)),
-    );
+  function handleRegionChange(regionId: string) {
+    set("regionId", regionId);
+    set("ciudadId", "");
+    if (regionId) fetchCiudades(regionId);
+  }
+
+  function addTelefono() {
+    const value = telDraft.trim();
+    if (!value) return;
+    set("telefonos", [...form.telefonos, { telefono: value, etiqueta: "" }]);
+    setTelDraft("");
   }
 
   function removeTelefono(idx: number) {
@@ -103,16 +141,70 @@ export function ClienteFormModal({
     );
   }
 
+  /**
+   * "Importar datos" (header del drawer) -- rellena el formulario abierto desde la
+   * primera fila de un CSV. A diferencia del "Excel" de la barra superior (que crea
+   * muchos clientes de una vez), esto es para un solo registro: útil cuando la
+   * información ya vive en una hoja de cálculo con una fila por cliente. País/
+   * departamento/ciudad no se rellenan porque el CSV trae nombres, no los ids del
+   * catálogo -- esos tres se siguen eligiendo a mano.
+   */
+  function handleImportFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const row = parseCSVFirstRow(String(reader.result));
+      if (!row) {
+        pushToast("El archivo no tiene una fila de datos para importar", "danger");
+        return;
+      }
+      const pick = (...keys: string[]) => {
+        for (const key of keys) {
+          const found = Object.keys(row).find((h) => h.trim().toLowerCase() === key);
+          if (found && row[found]) return row[found];
+        }
+        return undefined;
+      };
+      setForm((f) => ({
+        ...f,
+        nombre: pick("nombre", "empresa", "cliente") ?? f.nombre,
+        sector: pick("sector", "industria") ?? f.sector,
+        estado: pick("estado") ?? f.estado,
+        contacto: pick("contacto", "persona", "personadecontacto") ?? f.contacto,
+        cargoContacto: pick("cargo", "cargocontacto") ?? f.cargoContacto,
+        email: pick("email", "correo") ?? f.email,
+        direccion: pick("direccion", "dirección") ?? f.direccion,
+        web: pick("web", "sitioweb", "sitio web") ?? f.web,
+        valorReferencia: pick("valorreferencia", "valor de referencia", "valor") ?? f.valorReferencia,
+        notas: pick("notas") ?? f.notas,
+      }));
+      const tel = pick("telefono", "teléfono", "telefonos", "teléfonos");
+      if (tel) setTelDraft(tel);
+      pushToast("Datos importados. Revisa los campos y guarda.", "info");
+    };
+    reader.readAsText(file);
+  }
+
   function handleSave() {
     const nextErrors: Record<string, string> = {};
     if (!form.nombre.trim()) nextErrors.nombre = "El nombre del cliente es requerido";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
+    // "ciudad" (texto libre) se conserva sincronizada con la ciudad de catálogo elegida --
+    // así cualquier pantalla que todavía no resuelva ciudadId (ej. el Excel exportado) sigue
+    // mostrando algo legible. Si no se eligió ciudad de catálogo, se respeta lo que ya hubiera.
+    const ciudadCatalogoNombre = cityOptions.find((c) => c.id === form.ciudadId)?.nombre;
     const input: ClienteInput = {
       nombre: form.nombre.trim(),
       sector: form.sector.trim() || null,
-      ciudad: form.ciudad.trim() || null,
+      paisId: form.paisId || null,
+      regionId: form.regionId || null,
+      ciudadId: form.ciudadId || null,
+      // Defensivo: al crear, el dropdown de estado ni siquiera se muestra (ver sección "Quién
+      // es" arriba), pero esto asegura que un cliente nuevo nunca se guarde en otro estado
+      // aunque `form.estado` se hubiera quedado con un valor de una edición anterior.
+      estado: editing ? form.estado : CLIENTE_ESTADOS[0],
+      ciudad: ciudadCatalogoNombre ?? (form.ciudad.trim() || null),
       direccion: form.direccion.trim() || null,
       web: form.web.trim() || null,
       contacto: form.contacto.trim() || null,
@@ -125,147 +217,223 @@ export function ClienteFormModal({
     onSave(input);
   }
 
-  async function handleImport(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    setImporting(true);
-    try {
-      const result = await clientesApi.importar(file);
-      if (result.creados > 0) onImported?.();
-      pushToast(
-        result.creados > 0 ? `${result.creados} clientes importados` : "No se creó ningún cliente",
-        result.creados > 0 ? "success" : "danger",
-      );
-    } catch (error) {
-      pushToast(error instanceof Error ? error.message : "No se pudo importar el archivo", "danger");
-    } finally {
-      setImporting(false);
-    }
-  }
-
   return (
     <Drawer open={open} onClose={onClose}>
-      <div className="sticky top-0 z-[1] flex items-start justify-between gap-3.5 border-b border-border bg-surface p-5">
-        <div className="min-w-0">
-          <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">
-            {editing ? "EDITAR CLIENTE" : "REGISTRAR CLIENTE"}
-          </div>
-          <h2 className="truncate text-[19px] font-semibold leading-tight">
-            {editing ? "Editar datos del cliente" : "Datos del nuevo cliente"}
-          </h2>
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {puedeImportar && (
-            <>
-              <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
-              <Button size="sm" icon={Upload} disabled={importing} onClick={() => importRef.current?.click()}>
-                {importing ? "Importando…" : "Importar datos"}
-              </Button>
-            </>
+      <FormDrawerHeader
+        eyebrow={editing ? "Editar cliente" : "Registrar cliente"}
+        title={editing ? editing.nombre || "Datos del cliente" : "Datos del nuevo cliente"}
+        onClose={onClose}
+        onImportFile={handleImportFile}
+      />
+
+      <FormDrawerBody>
+        <FormDrawerSection number="01" title="Quién es">
+          {editing ? (
+            <div className="grid grid-cols-1 gap-3 min-[1001px]:grid-cols-[1.6fr_1fr]">
+              <Field label="Nombre de la empresa" required error={errors.nombre}>
+                <Input
+                  value={form.nombre}
+                  onChange={(e) => set("nombre", e.target.value)}
+                  placeholder="Ej. Grupo Vitalis"
+                />
+              </Field>
+              <Field label="Estado">
+                <Dropdown
+                  value={form.estado}
+                  onChange={(v) => set("estado", v || CLIENTE_ESTADOS[0])}
+                  placeholder="Elige un estado"
+                  options={ESTADO_OPTIONS}
+                />
+              </Field>
+            </div>
+          ) : (
+            // Un cliente nuevo siempre entra como "Activo" -- el estado (Prospecto/Inactivo)
+            // solo se decide después, al editarlo, no en el momento de registrarlo.
+            <Field
+              label="Nombre de la empresa"
+              required
+              error={errors.nombre}
+              hint={
+                <div className="mt-1.5 text-xs text-text-3">
+                  Se registrará como <span className="font-medium text-text-2">Activo</span>. Podrás cambiar el estado
+                  más adelante, al editarlo.
+                </div>
+              }
+            >
+              <Input
+                value={form.nombre}
+                onChange={(e) => set("nombre", e.target.value)}
+                placeholder="Ej. Grupo Vitalis"
+              />
+            </Field>
           )}
-          <DrawerCloseButton onClose={onClose} />
-        </div>
-      </div>
-
-      <div className="flex-1 p-5">
-        <FormSection n="01" title="Quién es" />
-        <Field label="Nombre de la empresa" required error={errors.nombre}>
-          <Input
-            value={form.nombre}
-            onChange={(e) => set("nombre", e.target.value)}
-            placeholder="Ej. Grupo Vitalis"
-          />
-        </Field>
-        <Field label="Industria">
-          <Input value={form.sector} onChange={(e) => set("sector", e.target.value)} placeholder="Consumo masivo, tecnología, finanzas…" />
-        </Field>
-
-        <FormSection n="02" title="Dónde está" />
-        <Row cols={2}>
-          <Field label="Ciudad">
-            <Input value={form.ciudad} onChange={(e) => set("ciudad", e.target.value)} placeholder="Ej. Bogotá" />
-          </Field>
-          <Field label="Dirección">
-            <Input value={form.direccion} onChange={(e) => set("direccion", e.target.value)} placeholder="Dirección" />
-          </Field>
-        </Row>
-        <Field label="Sitio web">
-          <Input value={form.web} onChange={(e) => set("web", e.target.value)} placeholder="https://…" />
-        </Field>
-
-        <FormSection n="03" title="Con quién se habla" />
-        <Row cols={2}>
-          <Field label="Persona de contacto">
-            <Input value={form.contacto} onChange={(e) => set("contacto", e.target.value)} placeholder="Nombre y apellido" />
-          </Field>
-          <Field label="Cargo">
+          <Field label="Industria">
             <Input
-              value={form.cargoContacto}
-              onChange={(e) => set("cargoContacto", e.target.value)}
-              placeholder="Ej. Gerente de Marketing"
+              value={form.sector}
+              onChange={(e) => set("sector", e.target.value)}
+              placeholder="Consumo masivo, tecnología, finanzas…"
             />
           </Field>
-        </Row>
-        <Field label="Teléfonos">
-          <div className="flex flex-col gap-2">
-            {form.telefonos.map((t, idx) => (
-              <div key={t.id ?? idx} className="flex items-center gap-1.5">
+        </FormDrawerSection>
+
+        <FormDrawerSection number="02" title="Dónde está">
+          <Row cols={3}>
+            <Field label="País">
+              <Dropdown
+                value={form.paisId}
+                onChange={handlePaisChange}
+                placeholder="Seleccionar…"
+                options={paises.map((p) => ({ value: p.id, label: p.nombre }))}
+              />
+            </Field>
+            <Field label={paises.find((p) => p.id === form.paisId)?.etiquetaRegion || "Departamento"}>
+              <Dropdown
+                value={form.regionId}
+                onChange={handleRegionChange}
+                placeholder="Seleccionar…"
+                disabled={!form.paisId}
+                disabledHint="— elige país primero —"
+                options={regionOptions.map((r) => ({ value: r.id, label: r.nombre }))}
+              />
+            </Field>
+            <Field label="Ciudad">
+              <Dropdown
+                value={form.ciudadId}
+                onChange={(v) => set("ciudadId", v)}
+                placeholder="Seleccionar…"
+                disabled={!form.regionId}
+                disabledHint="— elige departamento primero —"
+                options={cityOptions.map((c) => ({ value: c.id, label: c.nombre }))}
+              />
+            </Field>
+          </Row>
+          <Row cols={2}>
+            <Field label="Dirección">
+              <Input value={form.direccion} onChange={(e) => set("direccion", e.target.value)} placeholder="Dirección" />
+            </Field>
+            <Field label="Sitio web">
+              <Input value={form.web} onChange={(e) => set("web", e.target.value)} placeholder="https://…" />
+            </Field>
+          </Row>
+        </FormDrawerSection>
+
+        <FormDrawerSection number="03" title="Con quién se habla">
+          <div className="grid grid-cols-1 gap-3 min-[1001px]:grid-cols-[1.6fr_1fr]">
+            <Field label="Persona de contacto">
+              <Input value={form.contacto} onChange={(e) => set("contacto", e.target.value)} placeholder="Nombre y apellido" />
+            </Field>
+            <Field label="Cargo">
+              <Input
+                value={form.cargoContacto}
+                onChange={(e) => set("cargoContacto", e.target.value)}
+                placeholder="Ej. Directora de Mercadeo"
+              />
+            </Field>
+          </div>
+
+          <Field label="Teléfonos">
+            <div className="flex flex-col gap-2">
+              {form.telefonos.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {form.telefonos.map((t, idx) => (
+                    <span
+                      key={t.id ?? idx}
+                      className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
+                    >
+                      {t.telefono}
+                      {t.etiqueta ? ` · ${t.etiqueta}` : ""}
+                      <button
+                        type="button"
+                        onClick={() => removeTelefono(idx)}
+                        aria-label="Quitar teléfono"
+                        className="flex h-[18px] w-[18px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-text-2 hover:bg-black/10 hover:text-red"
+                      >
+                        <X size={11} strokeWidth={2.4} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
                 <Input
-                  value={t.telefono}
-                  onChange={(e) => updateTelefono(idx, { telefono: e.target.value })}
+                  value={telDraft}
+                  onChange={(e) => setTelDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTelefono();
+                    }
+                  }}
                   placeholder="+57 300 000 0000"
                   className="flex-1"
                 />
-                <Input
-                  value={t.etiqueta ?? ""}
-                  onChange={(e) => updateTelefono(idx, { etiqueta: e.target.value })}
-                  placeholder="Etiqueta (ej. oficina)"
-                  className="w-[160px]"
-                />
                 <button
                   type="button"
-                  onClick={() => removeTelefono(idx)}
-                  aria-label="Quitar teléfono"
-                  className="flex cursor-pointer items-center rounded border-none bg-transparent p-1.5 text-text-2 hover:bg-gray-light hover:text-red"
+                  onClick={addTelefono}
+                  className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
                 >
-                  <X size={14} strokeWidth={2} />
+                  Agregar
                 </button>
               </div>
-            ))}
-            <Button size="sm" icon={Plus} onClick={addTelefono} className="self-start">
-              Agregar teléfono
-            </Button>
+            </div>
+          </Field>
+
+          <Field label="Correo">
+            <Input
+              type="email"
+              value={form.email}
+              onChange={(e) => set("email", e.target.value)}
+              placeholder="contacto@empresa.com"
+            />
+          </Field>
+        </FormDrawerSection>
+
+        <FormDrawerSection number="04" title="Qué recordar">
+          <Field label="Notas internas">
+            <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Historial, condiciones…" />
+          </Field>
+        </FormDrawerSection>
+
+        <FormDrawerSection number="05" title="Facturación">
+          <Field label="Valor de referencia">
+            <Input
+              value={form.valorReferencia}
+              onChange={(e) => set("valorReferencia", e.target.value)}
+              placeholder="Ej. $50.000.000 / año"
+            />
+          </Field>
+        </FormDrawerSection>
+
+        <FormDrawerSection number="06" title="Archivos y enlaces">
+          {editing ? (
+            <EntityAttachments entityId={editing.id} api={clienteAdjuntosApi} />
+          ) : (
+            <p className="text-sm text-text-3">Guarda el cliente primero para poder subir archivos o agregar enlaces.</p>
+          )}
+        </FormDrawerSection>
+      </FormDrawerBody>
+
+      <FormDrawerFooter>
+        {editing && onDelete && (
+          <div className="mr-auto">
+            <DeleteOrRequestButton tipoEntidad="cliente" entidadId={editing.id} nombre={editing.nombre} onDelete={onDelete} />
           </div>
-        </Field>
-        <Field label="Correo">
-          <Input
-            type="email"
-            value={form.email}
-            onChange={(e) => set("email", e.target.value)}
-            placeholder="nombre@empresa.com"
-          />
-        </Field>
-
-        <FormSection n="04" title="Qué recordar" />
-        <Field label="Valor de referencia">
-          <Input
-            value={form.valorReferencia}
-            onChange={(e) => set("valorReferencia", e.target.value)}
-            placeholder="Ej. $50.000.000 / año"
-          />
-        </Field>
-        <Field label="Notas internas">
-          <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Historial, condiciones…" />
-        </Field>
-      </div>
-
-      <div className="sticky bottom-0 flex justify-end gap-2 border-t border-border bg-surface p-4">
-        <Button onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" onClick={handleSave}>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-11 cursor-pointer rounded-[var(--radius-md)] border border-border bg-transparent px-4 text-sm font-medium text-text transition-colors hover:border-text hover:bg-bg"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleSave}
+          className="h-11 cursor-pointer rounded-[var(--radius-md)] bg-teal-mid px-5 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+        >
           {editing ? "Guardar cambios" : "Registrar cliente"}
-        </Button>
-      </div>
+        </button>
+      </FormDrawerFooter>
     </Drawer>
   );
 }

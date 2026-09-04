@@ -1,12 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FolderOpen, Heart, Pencil, Plus, Trash2 } from "lucide-react";
-import { ActiveFilters, Badge, Button, EmptyState, Stars, StatCard, ViewToggle, type FilterChip } from "@/components/ui/primitives";
-import { PROVIDER_STATUS_COLORS, statusColor } from "@/lib/constants";
-import { ImportExportBar } from "@/components/ui/ImportExportBar";
-import { Select } from "@/components/ui/form";
+import { AlertTriangle, FolderOpen, Heart, LayoutGrid, Pencil, Rows3 } from "lucide-react";
+import {
+  ActiveFilters,
+  Avatar,
+  Badge,
+  CountryBadge,
+  Dropdown,
+  EmptyState,
+  Pagination,
+  StatCard,
+  Stars,
+  TabButton,
+  TabsShell,
+  Tag,
+  type FilterChip,
+} from "@/components/ui/primitives";
+import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
 import { Spinner } from "@/components/ui/Spinner";
+import { RowAction, Table, Td, Th, Thead, Tr } from "@/components/ui/Table";
+import { PROVEEDOR_ESTADOS, PROVIDER_STATUS_COLORS, statusColor } from "@/lib/constants";
 import { useAuthStore } from "@/store/auth-store";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { usePageToolbarStore } from "@/store/page-toolbar-store";
@@ -34,14 +48,27 @@ export default function ProveedoresPage() {
     useCatalogosStore();
   const pushToast = useUiStore((s) => s.pushToast);
   const authUser = useAuthStore((s) => s.user);
-  const esAdmin = authUser?.rol === "admin" || authUser?.rol === "super_admin";
   const setToolbar = usePageToolbarStore((s) => s.setToolbar);
   const clearToolbar = usePageToolbarStore((s) => s.clearToolbar);
+  const esAdmin = authUser?.rol === "admin" || authUser?.rol === "super_admin";
 
   useEffect(() => {
     fetchAll();
     fetchBase();
   }, [fetchAll, fetchBase]);
+
+  // Precarga región/ciudad de cada país/región presente en la lista -- así tarjetas y tabla
+  // resuelven "Ciudad · Departamento · País" sin que cada una pida su propio fetch (igual que
+  // en Clientes: fetchRegiones/fetchCiudades cachean por id, repetir la llamada no cuesta nada).
+  useEffect(() => {
+    const paisIds = [...new Set(providers.map((p) => p.paisId).filter((id): id is string => Boolean(id)))];
+    paisIds.forEach((id) => fetchRegiones(id));
+  }, [providers, fetchRegiones]);
+
+  useEffect(() => {
+    const regionIds = [...new Set(providers.map((p) => p.regionId).filter((id): id is string => Boolean(id)))];
+    regionIds.forEach((id) => fetchCiudades(id));
+  }, [providers, fetchCiudades]);
 
   const [search, setSearch] = useState("");
   const [filtPais, setFiltPais] = useState("");
@@ -51,19 +78,21 @@ export default function ProveedoresPage() {
   const [filtEstado, setFiltEstado] = useState("");
   const [soloMios, setSoloMios] = useState(false);
   const [view, setView] = useState<"cards" | "table">("cards");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Proveedor | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
 
   useEffect(() => {
-    const onSearch = (event: Event) => setSearch((event as CustomEvent<string>).detail);
-    window.addEventListener("nexit:search", onSearch);
-    return () => window.removeEventListener("nexit:search", onSearch);
+    function onGlobalSearch(event: Event) {
+      setSearch((event as CustomEvent<string>).detail);
+    }
+    window.addEventListener("nexit:search", onGlobalSearch);
+    return () => window.removeEventListener("nexit:search", onGlobalSearch);
   }, []);
 
-  // Registra las acciones de esta página (Excel + "Nuevo proveedor") en la
-  // barra superior compartida -- ver comentario en page-toolbar-store.ts.
   useEffect(() => {
     setToolbar({
       entidad: "proveedores",
@@ -78,26 +107,24 @@ export default function ProveedoresPage() {
         setFormOpen(true);
       },
     });
-    return () => clearToolbar();
-  }, [setToolbar, clearToolbar, esAdmin, refresh]);
-
-  function handleFiltPais(paisId: string) {
-    setFiltPais(paisId);
-    setFiltRegion("");
-    setFiltCiudad("");
-    if (paisId) fetchRegiones(paisId);
-  }
-
-  function handleFiltRegion(regionId: string) {
-    setFiltRegion(regionId);
-    setFiltCiudad("");
-    if (regionId) fetchCiudades(regionId);
-  }
+    return clearToolbar;
+  }, [clearToolbar, esAdmin, refresh, setToolbar]);
 
   const regionOptions = useMemo(() => regionesPorPais[filtPais] ?? [], [regionesPorPais, filtPais]);
   const cityOptions = useMemo(() => ciudadesPorRegion[filtRegion] ?? [], [ciudadesPorRegion, filtRegion]);
 
-  const estados = useMemo(() => [...new Set(providers.map((p) => p.estado))].sort(), [providers]);
+  function handleFiltPais(v: string) {
+    setFiltPais(v);
+    setFiltRegion("");
+    setFiltCiudad("");
+    if (v) fetchRegiones(v);
+  }
+
+  function handleFiltRegion(v: string) {
+    setFiltRegion(v);
+    setFiltCiudad("");
+    if (v) fetchCiudades(v);
+  }
 
   const misProveedoresCount = useMemo(
     () => (authUser ? providers.filter((p) => p.colaboradores.some((c) => c.usuarioId === authUser.id)).length : 0),
@@ -120,13 +147,25 @@ export default function ProveedoresPage() {
     });
   }, [providers, search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado, soloMios, authUser]);
 
+  // Vuelve a la página 1 cada vez que cambia el resultado filtrado -- si no, quedarse en la
+  // página 3 con un filtro que deja solo 1 resultado mostraría una lista vacía sin explicación.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset intencional al cambiar de filtro/vista, no una sincronización derivable sin efecto
+    setPage(1);
+  }, [search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado, soloMios, view]);
+
+  const per = perPage === 0 ? Math.max(filtered.length, 1) : perPage;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / per));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((currentPage - 1) * per, (currentPage - 1) * per + per);
+
   const stats = useMemo(() => {
     const total = providers.length;
-    const inactivos = providers.filter((p) => p.estado !== "Activo").length;
+    const inactivos = providers.filter((p) => p.estado === "Bloqueado").length;
+    const paisesCount = new Set(providers.map((p) => p.paisId).filter(Boolean)).size;
     const conScore = providers.filter((p) => typeof p.score === "number");
     const avg = conScore.length ? conScore.reduce((a, b) => a + (b.score ?? 0), 0) / conScore.length : 0;
-    const paisesCount = new Set(providers.map((p) => p.paisId).filter(Boolean)).size;
-    return { total, inactivos, avg, paisesCount };
+    return { total, inactivos, paisesCount, avg };
   }, [providers]);
 
   const chips: FilterChip[] = [
@@ -151,7 +190,9 @@ export default function ProveedoresPage() {
 
   function clearAll() {
     setSearch("");
-    handleFiltPais("");
+    setFiltPais("");
+    setFiltRegion("");
+    setFiltCiudad("");
     setFiltCat("");
     setFiltEstado("");
     setSoloMios(false);
@@ -173,11 +214,14 @@ export default function ProveedoresPage() {
     }
   }
 
+  // El "¿Eliminar a X?" ya lo confirma el diálogo propio de DeleteOrRequestButton --
+  // esto solo se llama después de que un admin confirma ahí.
   async function handleDelete(id: string) {
-    if (!window.confirm("¿Eliminar este proveedor? Esta acción no se puede deshacer.")) return;
     try {
       await removeProvider(id);
       setDetailId(null);
+      setFormOpen(false);
+      setEditing(null);
       pushToast("Proveedor eliminado", "success");
     } catch (err) {
       pushToast(err instanceof Error ? err.message : "No se pudo eliminar el proveedor", "danger");
@@ -188,113 +232,99 @@ export default function ProveedoresPage() {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">Base de datos</div>
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">Base de datos</div>
           <h1 className={styles.h1}>Gestión de proveedores</h1>
-          <p className="mt-1 text-[13px] text-text-2">Busca arriba o filtra por país, departamento, ciudad, categoría y estado.</p>
+          <p className="mb-5 text-[13px] text-text-2">Cada proveedor con su cobertura, servicios y valoración.</p>
         </div>
-        <ViewToggle view={view} onChange={setView} />
+        <TabsShell>
+          <TabButton active={view === "cards"} icon={LayoutGrid} onClick={() => setView("cards")}>
+            Tarjetas
+          </TabButton>
+          <TabButton active={view === "table"} icon={Rows3} onClick={() => setView("table")}>
+            Tabla
+          </TabButton>
+        </TabsShell>
       </div>
 
       <div className={`mb-5 ${styles.kpis}`}>
         <StatCard n={stats.total} label="Total de proveedores" />
-        <StatCard n={stats.inactivos} label="Inactivos" />
-        <StatCard n={stats.paisesCount} label="Países donde trabajamos" />
-        <StatCard
-          n={
-            <span className="inline-flex items-center gap-1.5">
-              {stats.avg.toLocaleString("es-CO", { maximumFractionDigits: 1, minimumFractionDigits: stats.avg % 1 ? 1 : 0 }) || "—"}
-              <Stars n={Math.round(stats.avg)} size={16} />
-            </span>
-          }
-          label="Valoración promedio"
-        />
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => setSoloMios((v) => !v)}
-          aria-pressed={soloMios}
-          className={`flex items-center gap-1.5 rounded-[var(--radius-md)] border px-3 py-1.5 text-[13px] font-medium transition-colors ${
-            soloMios ? "border-text bg-text text-white" : "border-border bg-surface text-text hover:bg-gray-light"
-          }`}
+          onClick={() => setFiltEstado((v) => (v === "Bloqueado" ? "" : "Bloqueado"))}
+          title="Ver solo los proveedores inactivos"
+          className="min-h-[80px] cursor-pointer rounded-[var(--radius-lg)] border border-border bg-surface px-4 py-3.5 text-left transition-colors hover:border-text"
         >
-          <Heart size={13} strokeWidth={2} fill={soloMios ? "currentColor" : "none"} />
-          Mis proveedores ({misProveedoresCount})
+          <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-3">Inactivos</div>
+          <div className="mt-1.5 text-[28px] font-semibold leading-none tracking-[-0.03em]" style={{ color: "#8A2525" }}>
+            {stats.inactivos}
+          </div>
         </button>
+        <StatCard n={stats.paisesCount} label="Países donde trabajamos" />
+        <div className="min-h-[80px] rounded-[var(--radius-lg)] border border-border bg-surface px-4 py-3.5">
+          <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-text-3">Valoración promedio</div>
+          <div className="mt-1.5 flex items-center gap-2">
+            <span className="text-[28px] font-semibold leading-none tracking-[-0.03em]">{stats.avg.toFixed(1)}</span>
+            <Stars n={Math.round(stats.avg)} size={14} />
+          </div>
+        </div>
       </div>
 
-      {/* Mismas acciones que la barra superior ("Excel" / "Nuevo proveedor"),
-          pero solo visibles por debajo de los 1000px reales del diseño --
-          en escritorio esas acciones viven arriba, junto al buscador (ver
-          layout.tsx + page-toolbar-store.ts); ese header de escritorio no
-          existe en móvil, así que se repiten acá para no perder la función. */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 min-[1000px]:hidden">
-        <ImportExportBar
-          entidad="proveedores"
-          puedeImportar={esAdmin}
-          onExport={proveedoresApi.exportar}
-          onImport={proveedoresApi.importar}
-          onImported={refresh}
-        />
-        <Button
-          variant="primary"
-          icon={Plus}
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
-        >
-          Nuevo proveedor
-        </Button>
-      </div>
+      <div className={`mb-4 ${styles.filtersPanel}`}>
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSoloMios((v) => !v)}
+            aria-pressed={soloMios}
+            className={`flex h-8 items-center gap-[7px] rounded-[20px] border px-3 text-[13px] font-medium transition-colors ${
+              soloMios ? "border-text bg-text text-white" : "border-border bg-surface text-text hover:border-text"
+            }`}
+          >
+            <Heart size={13} strokeWidth={1.8} fill={soloMios ? "currentColor" : "none"} />
+            Mis proveedores ({misProveedoresCount})
+          </button>
+        </div>
 
-      <div className={`mb-4 ${styles.filters}`}>
-        <Select value={filtPais} onChange={(e) => handleFiltPais(e.target.value)}>
-          <option value="">Todos los países</option>
-          {paises.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nombre}
-            </option>
-          ))}
-        </Select>
-        <Select value={filtRegion} onChange={(e) => handleFiltRegion(e.target.value)} disabled={!filtPais}>
-          <option value="">Todos los departamentos</option>
-          {regionOptions.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.nombre}
-            </option>
-          ))}
-        </Select>
-        <Select value={filtCiudad} onChange={(e) => setFiltCiudad(e.target.value)} disabled={!filtRegion}>
-          <option value="">Todas las ciudades</option>
-          {cityOptions.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre}
-            </option>
-          ))}
-        </Select>
-        <Select value={filtCat} onChange={(e) => setFiltCat(e.target.value)}>
-          <option value="">Todas las categorías</option>
-          {categoriasProveedor.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.nombre}
-            </option>
-          ))}
-        </Select>
-        <Select value={filtEstado} onChange={(e) => setFiltEstado(e.target.value)}>
-          <option value="">Cualquier estado</option>
-          {estados.map((e) => (
-            <option key={e} value={e}>
-              {e}
-            </option>
-          ))}
-        </Select>
-      </div>
+        <div className={styles.filterControls}>
+          <Dropdown
+            value={filtPais}
+            onChange={handleFiltPais}
+            placeholder="Todos los países"
+            options={paises.map((p) => ({ value: p.id, label: p.nombre }))}
+          />
+          <Dropdown
+            value={filtRegion}
+            onChange={handleFiltRegion}
+            placeholder="Todos los departamentos"
+            disabled={!filtPais}
+            disabledHint="— elige país primero —"
+            options={regionOptions.map((r) => ({ value: r.id, label: r.nombre }))}
+          />
+          <Dropdown
+            value={filtCiudad}
+            onChange={setFiltCiudad}
+            placeholder="Todas las ciudades"
+            disabled={!filtRegion}
+            disabledHint="— elige departamento primero —"
+            options={cityOptions.map((c) => ({ value: c.id, label: c.nombre }))}
+          />
+          <Dropdown
+            value={filtCat}
+            onChange={setFiltCat}
+            placeholder="Todas las categorías"
+            options={categoriasProveedor.map((c) => ({ value: c.id, label: c.nombre }))}
+          />
+          <Dropdown
+            value={filtEstado}
+            onChange={setFiltEstado}
+            placeholder="Cualquier estado"
+            options={PROVEEDOR_ESTADOS.map((e) => ({ value: e, label: e }))}
+          />
+        </div>
 
-      <ActiveFilters chips={chips} onRemove={removeChip} onClearAll={clearAll} />
+        <ActiveFilters chips={chips} onRemove={removeChip} onClearAll={clearAll} variant="panel" />
+      </div>
 
       {loading && providers.length === 0 ? (
         <div className="flex justify-center py-14 text-text-2">
@@ -304,83 +334,118 @@ export default function ProveedoresPage() {
         <EmptyState icon={AlertTriangle} title={error} tone="danger" action={{ label: "Reintentar", onClick: fetchAll }} />
       ) : filtered.length === 0 ? (
         <EmptyState icon={FolderOpen} title="No se encontraron proveedores con estos filtros." />
-      ) : view === "table" ? (
-        <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface">
-          <table className="w-full min-w-[820px] text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-[11px] uppercase tracking-wide text-text-3">
-                <th className="px-4 py-2.5 font-medium">Proveedor</th>
-                <th className="px-4 py-2.5 font-medium">Categoría</th>
-                <th className="px-4 py-2.5 font-medium">Ubicación</th>
-                <th className="px-4 py-2.5 font-medium">Valoración</th>
-                <th className="px-4 py-2.5 font-medium">Estado</th>
-                <th className="px-4 py-2.5 font-medium">Contacto</th>
-                <th className="px-4 py-2.5 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => {
-                const paisNombre = paises.find((x) => x.id === p.paisId)?.nombre;
-                const catNombre = categoriasProveedor.find((x) => x.id === p.categoriaId)?.nombre;
-                const sc = statusColor(PROVIDER_STATUS_COLORS, p.estado);
-                return (
-                  <tr
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setDetailId(p.id)}
-                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setDetailId(p.id))}
-                    className="cursor-pointer border-b border-border last:border-0 hover:bg-gray-light"
-                  >
-                    <td className="px-4 py-2.5 font-medium text-text">{p.nombre}</td>
-                    <td className="px-4 py-2.5 text-text-2">{catNombre || "—"}</td>
-                    <td className="px-4 py-2.5 text-text-2">{paisNombre || "—"}</td>
-                    <td className="px-4 py-2.5">{typeof p.score === "number" ? <Stars n={p.score} size={12} /> : "—"}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge bg={sc.bg} color={sc.c}>
-                        {p.estado}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5 text-text-2">{p.contacto || "—"}</td>
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setEditing(p);
-                            setFormOpen(true);
-                          }}
-                          aria-label={`Editar ${p.nombre}`}
-                          className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:bg-gray-light hover:text-text"
-                        >
-                          <Pencil size={13} strokeWidth={2} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleDelete(p.id);
-                          }}
-                          aria-label={`Eliminar ${p.nombre}`}
-                          className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:bg-gray-light hover:text-red"
-                        >
-                          <Trash2 size={13} strokeWidth={2} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      ) : view === "cards" ? (
+        <div className="flex flex-col gap-3">
+          <div className={styles.cardsGrid}>
+            {pageRows.map((p) => (
+              <ProviderCard
+                key={p.id}
+                provider={p}
+                onOpen={() => setDetailId(p.id)}
+                onEdit={() => {
+                  setEditing(p);
+                  setFormOpen(true);
+                }}
+              />
+            ))}
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-border bg-surface px-4 py-3">
+            <Pagination
+              total={filtered.length}
+              page={currentPage}
+              perPage={perPage}
+              onPageChange={setPage}
+              onPerPageChange={(n) => {
+                setPerPage(n);
+                setPage(1);
+              }}
+            />
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-3">
-          {filtered.map((p) => (
-            <ProviderCard key={p.id} provider={p} onOpen={() => setDetailId(p.id)} />
-          ))}
-        </div>
+        <Table
+          footer={
+            <Pagination
+              total={filtered.length}
+              page={currentPage}
+              perPage={perPage}
+              onPageChange={setPage}
+              onPerPageChange={(n) => {
+                setPerPage(n);
+                setPage(1);
+              }}
+            />
+          }
+        >
+          <Thead>
+            <Th>Proveedor</Th>
+            <Th>Categoría</Th>
+            <Th>Ubicación</Th>
+            <Th>Estado</Th>
+            <Th>Contacto</Th>
+            <Th className="text-right">Acciones</Th>
+          </Thead>
+          <tbody>
+            {pageRows.map((p) => {
+              const sc = statusColor(PROVIDER_STATUS_COLORS, p.estado);
+              const paisNombre = paises.find((x) => x.id === p.paisId)?.nombre;
+              const regionNombre = regionesPorPais[p.paisId ?? ""]?.find((r) => r.id === p.regionId)?.nombre;
+              const ciudadNombre = ciudadesPorRegion[p.regionId ?? ""]?.find((c) => c.id === p.ciudadId)?.nombre;
+              const categoriaNombre = categoriasProveedor.find((c) => c.id === p.categoriaId)?.nombre;
+              const ubicacion = [ciudadNombre, regionNombre, paisNombre].filter(Boolean).join(" · ");
+              return (
+                <Tr key={p.id} onClick={() => setDetailId(p.id)}>
+                  <Td>
+                    <div className="flex items-center gap-2.5">
+                      <Avatar nombre={p.nombre} size="sm" />
+                      <span className="font-medium">{p.nombre}</span>
+                    </div>
+                  </Td>
+                  <Td className="text-text-2">{categoriaNombre || "—"}</Td>
+                  <Td className="text-text-2">
+                    {ubicacion ? (
+                      <span className="flex items-center gap-1.5">
+                        <CountryBadge pais={paisNombre} /> {ubicacion}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </Td>
+                  <Td>
+                    <Badge bg={sc.bg} color={sc.c}>
+                      {p.estado}
+                    </Badge>
+                  </Td>
+                  <Td className="text-text-2">
+                    {p.contacto || "—"}
+                    {p.contacto && p.cargoContacto && <Tag className="ml-1.5">{p.cargoContacto}</Tag>}
+                  </Td>
+                  <Td>
+                    <div className="flex justify-end gap-1.5">
+                      <RowAction
+                        label="Editar este proveedor"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing(p);
+                          setFormOpen(true);
+                        }}
+                      >
+                        <Pencil size={14} strokeWidth={1.8} />
+                      </RowAction>
+                      <DeleteOrRequestButton
+                        compact
+                        tipoEntidad="proveedor"
+                        entidadId={p.id}
+                        nombre={p.nombre}
+                        onDelete={() => handleDelete(p.id)}
+                      />
+                    </div>
+                  </Td>
+                </Tr>
+              );
+            })}
+          </tbody>
+        </Table>
       )}
 
       <ProviderFormModal
@@ -390,6 +455,7 @@ export default function ProveedoresPage() {
           setEditing(null);
         }}
         onSave={handleSave}
+        onDelete={() => editing && handleDelete(editing.id)}
         editing={editing}
       />
 
@@ -400,7 +466,6 @@ export default function ProveedoresPage() {
           setEditing(detailProvider);
           setFormOpen(true);
         }}
-        onDelete={() => detailProvider && handleDelete(detailProvider.id)}
       />
     </div>
   );

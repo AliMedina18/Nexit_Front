@@ -2,17 +2,29 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, FolderKanban, Plus } from "lucide-react";
-import { ActiveFilters, Button, EmptyState, StatCard, ViewToggle, type FilterChip } from "@/components/ui/primitives";
-import { ImportExportBar } from "@/components/ui/ImportExportBar";
-import { Select } from "@/components/ui/form";
+import { AlertTriangle, FolderKanban, LayoutGrid, Pencil, Rows3 } from "lucide-react";
+import {
+  ActiveFilters,
+  Badge,
+  Dropdown,
+  EmptyState,
+  Pagination,
+  StatCard,
+  TabButton,
+  TabsShell,
+  type FilterChip,
+} from "@/components/ui/primitives";
+import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
 import { Spinner } from "@/components/ui/Spinner";
+import { RowAction, Table, Td, Th, Thead, Tr } from "@/components/ui/Table";
+import { PROJECT_STATUS_COLORS, statusColor } from "@/lib/constants";
+import { fmtDateShort } from "@/lib/format";
 import { useAuthStore } from "@/store/auth-store";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useClientesStore } from "@/store/clientes-store";
-import { usePageToolbarStore } from "@/store/page-toolbar-store";
 import { useProjectsStore } from "@/store/projects-store";
 import { useProvidersStore } from "@/store/providers-store";
+import { usePageToolbarStore } from "@/store/page-toolbar-store";
 import { useUiStore } from "@/store/ui-store";
 import { proyectosApi } from "@/services/api/proyectos-service";
 import type { Proyecto, ProyectoInput } from "@/types/api";
@@ -21,6 +33,12 @@ import { ProjectFormModal } from "./ProjectFormModal";
 import { ProjectDetail } from "./ProjectDetail";
 import styles from "@/styles/dashboard.module.css";
 
+/** Miembro del equipo cuyo rol suena a "ejecutivo" -- ver ProjectCard.tsx para el porqué de
+ * la búsqueda por coincidencia en vez de una posición fija. */
+function ejecutivoDe(project: Proyecto): string {
+  return project.equipo.find((m) => m.rol?.toLowerCase().includes("ejecutivo"))?.nombre ?? "—";
+}
+
 export default function ProyectosPage() {
   const { items: projects, loading, error, fetchAll, refresh, addProject, updateProject, removeProject } = useProjectsStore();
   const { items: providers, fetchAll: fetchProviders } = useProvidersStore();
@@ -28,9 +46,9 @@ export default function ProyectosPage() {
   const { estadosProyecto, fetchBase } = useCatalogosStore();
   const pushToast = useUiStore((s) => s.pushToast);
   const authUser = useAuthStore((s) => s.user);
-  const esAdmin = authUser?.rol === "admin" || authUser?.rol === "super_admin";
   const setToolbar = usePageToolbarStore((s) => s.setToolbar);
   const clearToolbar = usePageToolbarStore((s) => s.clearToolbar);
+  const esAdmin = authUser?.rol === "admin" || authUser?.rol === "super_admin";
 
   const searchParams = useSearchParams();
 
@@ -45,15 +63,11 @@ export default function ProyectosPage() {
   const [filtEstadoId, setFiltEstadoId] = useState("");
   const [filtClienteId, setFiltClienteId] = useState("");
   const [view, setView] = useState<"cards" | "table">("cards");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Proyecto | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const onSearch = (event: Event) => setSearch((event as CustomEvent<string>).detail);
-    window.addEventListener("nexit:search", onSearch);
-    return () => window.removeEventListener("nexit:search", onSearch);
-  }, []);
 
   useEffect(() => {
     const openId = searchParams.get("open");
@@ -61,8 +75,17 @@ export default function ProyectosPage() {
     if (openId) setDetailId(openId);
   }, [searchParams]);
 
-  // Registra las acciones de esta página (Excel + "Nuevo proyecto") en la
-  // barra superior compartida -- ver comentario en page-toolbar-store.ts.
+  // El buscador de la barra superior es el único buscador de la app -- se vuelve "Buscador de
+  // proyectos" en esta página (mismo patrón que Clientes/Proveedores), en vez de tener aquí
+  // abajo un segundo buscador local duplicado.
+  useEffect(() => {
+    function onGlobalSearch(event: Event) {
+      setSearch((event as CustomEvent<string>).detail);
+    }
+    window.addEventListener("nexit:search", onGlobalSearch);
+    return () => window.removeEventListener("nexit:search", onGlobalSearch);
+  }, []);
+
   useEffect(() => {
     setToolbar({
       entidad: "proyectos",
@@ -77,27 +100,46 @@ export default function ProyectosPage() {
         setFormOpen(true);
       },
     });
-    return () => clearToolbar();
-  }, [setToolbar, clearToolbar, esAdmin, refresh]);
+    return clearToolbar;
+  }, [clearToolbar, esAdmin, refresh, setToolbar]);
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
     return projects.filter((p) => {
       const clienteNombre = clientes.find((c) => c.id === p.clienteId)?.nombre ?? "";
-      const matchesSearch = !s || [p.nombre, clienteNombre].some((v) => v?.toLowerCase().includes(s));
+      const matchesSearch =
+        !s || [p.nombre, clienteNombre, ejecutivoDe(p)].some((v) => v?.toLowerCase().includes(s));
       const matchesEstado = !filtEstadoId || p.estadoId === filtEstadoId;
       const matchesCliente = !filtClienteId || p.clienteId === filtClienteId;
       return matchesSearch && matchesEstado && matchesCliente;
     });
   }, [projects, clientes, search, filtEstadoId, filtClienteId]);
 
+  // Vuelve a la página 1 cada vez que cambia el resultado filtrado.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset intencional al cambiar de filtro/vista, no una sincronización derivable sin efecto
+    setPage(1);
+  }, [search, filtEstadoId, filtClienteId, view]);
+
+  const per = perPage === 0 ? Math.max(filtered.length, 1) : perPage;
+  const totalPages = Math.max(1, Math.ceil(filtered.length / per));
+  const currentPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((currentPage - 1) * per, (currentPage - 1) * per + per);
+
   const stats = useMemo(() => {
     const total = projects.length;
     const estadosEnCurso = new Set(estadosProyecto.filter((e) => e.nombre === "En curso").map((e) => e.id));
     const enCurso = projects.filter((p) => estadosEnCurso.has(p.estadoId)).length;
     const sinProveedores = projects.filter((p) => p.proveedorIds.length === 0).length;
-    const provAsignados = new Set(projects.flatMap((p) => p.proveedorIds)).size;
-    return { total, enCurso, sinProveedores, provAsignados };
+    const now = new Date();
+    const in30 = new Date();
+    in30.setDate(in30.getDate() + 30);
+    const proximos = projects.filter((p) => {
+      if (!p.fechaEvento) return false;
+      const d = new Date(p.fechaEvento);
+      return d >= now && d <= in30;
+    }).length;
+    return { total, enCurso, sinProveedores, proximos };
   }, [projects, estadosProyecto]);
 
   const chips: FilterChip[] = [
@@ -134,11 +176,13 @@ export default function ProyectosPage() {
     }
   }
 
+  // El "¿Eliminar a X?" ya lo confirma el diálogo propio de DeleteOrRequestButton.
   async function handleDelete(id: string) {
-    if (!window.confirm("¿Eliminar este proyecto? Esta acción no se puede deshacer.")) return;
     try {
       await removeProject(id);
       setDetailId(null);
+      setFormOpen(false);
+      setEditing(null);
       pushToast("Proyecto eliminado", "success");
     } catch (err) {
       pushToast(err instanceof Error ? err.message : "No se pudo eliminar el proyecto", "danger");
@@ -147,73 +191,62 @@ export default function ProyectosPage() {
 
   const detailProject = detailId ? (projects.find((p) => p.id === detailId) ?? null) : null;
 
+  const paginationBar = (
+    <Pagination
+      total={filtered.length}
+      page={currentPage}
+      perPage={perPage}
+      onPageChange={setPage}
+      onPerPageChange={(n) => {
+        setPerPage(n);
+        setPage(1);
+      }}
+    />
+  );
+
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">Operación</div>
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">Operación</div>
           <h1 className={styles.h1}>Gestión de proyectos</h1>
-          <p className="mt-1 text-[13px] text-text-2">Cada evento con su cliente, equipo asignado, estado y proveedores vinculados.</p>
+          <p className="mb-5 text-[13px] text-text-2">Cada evento con su cliente, equipo asignado, estado y proveedores vinculados.</p>
         </div>
-        <ViewToggle view={view} onChange={setView} />
+        <TabsShell>
+          <TabButton active={view === "cards"} icon={LayoutGrid} onClick={() => setView("cards")}>
+            Tarjetas
+          </TabButton>
+          <TabButton active={view === "table"} icon={Rows3} onClick={() => setView("table")}>
+            Tabla
+          </TabButton>
+        </TabsShell>
       </div>
 
       <div className={`mb-5 ${styles.kpis}`}>
-        <StatCard n={stats.total} label="Proyectos totales" />
-        <StatCard n={stats.enCurso} label="En curso" />
-        <StatCard n={stats.provAsignados} label="Proveedores asignados" />
-        <StatCard n={stats.sinProveedores} label="Sin proveedores" />
+        <StatCard n={stats.total} label="Total de proyectos" />
+        <StatCard n={stats.enCurso} label="En curso" accent="#27500A" />
+        <StatCard n={stats.proximos} label="Próximos 30 días" />
+        <StatCard n={stats.sinProveedores} label="Sin proveedor asignado" accent="#8A2525" />
       </div>
 
-      {/* Mismas acciones que la barra superior ("Excel" / "Nuevo proyecto"),
-          pero solo visibles por debajo de los 1000px reales del diseño --
-          en escritorio esas acciones viven arriba, junto al buscador (ver
-          layout.tsx + page-toolbar-store.ts); ese header de escritorio no
-          existe en móvil, así que se repiten acá para no perder la función. */}
-      <div className="mb-4 flex flex-wrap items-center gap-2 min-[1000px]:hidden">
-        <ImportExportBar
-          entidad="proyectos"
-          puedeImportar={esAdmin}
-          onExport={proyectosApi.exportar}
-          onImport={proyectosApi.importar}
-          onImported={refresh}
-        />
-        <Button
-          variant="primary"
-          icon={Plus}
-          onClick={() => {
-            setEditing(null);
-            setFormOpen(true);
-          }}
-        >
-          Nuevo proyecto
-        </Button>
-      </div>
+      <div className={`mb-4 ${styles.filtersPanel}`}>
+        <div className={styles.filterControls}>
+          <Dropdown
+            value={filtEstadoId}
+            onChange={setFiltEstadoId}
+            placeholder="Cualquier estado"
+            options={[...estadosProyecto].sort((a, b) => a.fase - b.fase || a.orden - b.orden).map((e) => ({ value: e.id, label: e.nombre }))}
+          />
+          <Dropdown
+            value={filtClienteId}
+            onChange={setFiltClienteId}
+            placeholder="Todo cliente"
+            options={clientes.map((c) => ({ value: c.id, label: c.nombre }))}
+          />
+        </div>
 
-      <div className={`mb-4 ${styles.filters2}`}>
-        <Select value={filtEstadoId} onChange={(e) => setFiltEstadoId(e.target.value)}>
-          <option value="">Cualquier estado</option>
-          {[...estadosProyecto]
-            .sort((a, b) => a.fase - b.fase || a.orden - b.orden)
-            .map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.nombre}
-              </option>
-            ))}
-        </Select>
-        <Select value={filtClienteId} onChange={(e) => setFiltClienteId(e.target.value)}>
-          <option value="">Todo cliente</option>
-          {[...clientes]
-            .sort((a, b) => a.nombre.localeCompare(b.nombre))
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre}
-              </option>
-            ))}
-        </Select>
+        <ActiveFilters chips={chips} onRemove={removeChip} onClearAll={clearAll} variant="panel" />
       </div>
-
-      <ActiveFilters chips={chips} onRemove={removeChip} onClearAll={clearAll} />
 
       {loading && projects.length === 0 ? (
         <div className="flex justify-center py-14 text-text-2">
@@ -223,46 +256,75 @@ export default function ProyectosPage() {
         <EmptyState icon={AlertTriangle} title={error} tone="danger" action={{ label: "Reintentar", onClick: fetchAll }} />
       ) : filtered.length === 0 ? (
         <EmptyState icon={FolderKanban} title="No se encontraron proyectos con estos filtros." />
-      ) : view === "table" ? (
-        <div className="overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface">
-          <table className="w-full min-w-[680px] text-left text-[13px]">
-            <thead>
-              <tr className="border-b border-border text-[11px] uppercase tracking-wide text-text-3">
-                <th className="px-4 py-2.5 font-medium">Nombre</th>
-                <th className="px-4 py-2.5 font-medium">Cliente</th>
-                <th className="px-4 py-2.5 font-medium">Estado</th>
-                <th className="px-4 py-2.5 font-medium">Proveedores</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((p) => {
-                const clienteNombre = clientes.find((c) => c.id === p.clienteId)?.nombre;
-                const estadoNombre = estadosProyecto.find((e) => e.id === p.estadoId)?.nombre;
-                return (
-                  <tr
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    onClick={() => setDetailId(p.id)}
-                    onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), setDetailId(p.id))}
-                    className="cursor-pointer border-b border-border last:border-0 hover:bg-gray-light"
-                  >
-                    <td className="px-4 py-2.5 font-medium text-text">{p.nombre}</td>
-                    <td className="px-4 py-2.5 text-text-2">{clienteNombre || "—"}</td>
-                    <td className="px-4 py-2.5 text-text-2">{estadoNombre || "—"}</td>
-                    <td className="px-4 py-2.5 text-text-2">{p.proveedorIds.length}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      ) : view === "cards" ? (
+        <div className="flex flex-col gap-3">
+          <div className={styles.cardsGrid}>
+            {pageRows.map((p) => (
+              <ProjectCard
+                key={p.id}
+                project={p}
+                onOpen={() => setDetailId(p.id)}
+                onEdit={() => {
+                  setEditing(p);
+                  setFormOpen(true);
+                }}
+              />
+            ))}
+          </div>
+          <div className="rounded-[var(--radius-lg)] border border-border bg-surface px-4 py-3">{paginationBar}</div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 min-[760px]:grid-cols-2 min-[1100px]:grid-cols-3">
-          {filtered.map((p) => (
-            <ProjectCard key={p.id} project={p} onOpen={() => setDetailId(p.id)} />
-          ))}
-        </div>
+        <Table footer={paginationBar}>
+          <Thead>
+            <Th>Proyecto</Th>
+            <Th>Cliente</Th>
+            <Th>Fecha</Th>
+            <Th>Estado</Th>
+            <Th>Ejecutivo</Th>
+            <Th className="text-right">Acciones</Th>
+          </Thead>
+          <tbody>
+            {pageRows.map((p) => {
+              const estadoNombre = estadosProyecto.find((e) => e.id === p.estadoId)?.nombre ?? "—";
+              const clienteNombre = clientes.find((c) => c.id === p.clienteId)?.nombre;
+              const st = statusColor(PROJECT_STATUS_COLORS, estadoNombre);
+              return (
+                <Tr key={p.id} onClick={() => setDetailId(p.id)}>
+                  <Td className="font-medium">{p.nombre || "(Sin nombre)"}</Td>
+                  <Td className="text-text-2">{clienteNombre || "Sin cliente"}</Td>
+                  <Td className="text-text-2">{fmtDateShort(p.fechaEvento?.slice(0, 10)) || "—"}</Td>
+                  <Td>
+                    <Badge bg={st.bg} color={st.c}>
+                      {estadoNombre}
+                    </Badge>
+                  </Td>
+                  <Td className="text-text-2">{ejecutivoDe(p)}</Td>
+                  <Td>
+                    <div className="flex justify-end gap-1.5">
+                      <RowAction
+                        label="Editar este proyecto"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditing(p);
+                          setFormOpen(true);
+                        }}
+                      >
+                        <Pencil size={14} strokeWidth={1.8} />
+                      </RowAction>
+                      <DeleteOrRequestButton
+                        compact
+                        tipoEntidad="proyecto"
+                        entidadId={p.id}
+                        nombre={p.nombre}
+                        onDelete={() => handleDelete(p.id)}
+                      />
+                    </div>
+                  </Td>
+                </Tr>
+              );
+            })}
+          </tbody>
+        </Table>
       )}
 
       <ProjectFormModal
@@ -272,6 +334,7 @@ export default function ProyectosPage() {
           setEditing(null);
         }}
         onSave={handleSave}
+        onDelete={() => editing && handleDelete(editing.id)}
         editing={editing}
         providers={providers}
       />
@@ -284,7 +347,6 @@ export default function ProyectosPage() {
           setEditing(detailProject);
           setFormOpen(true);
         }}
-        onDelete={() => detailProject && handleDelete(detailProject.id)}
       />
     </div>
   );

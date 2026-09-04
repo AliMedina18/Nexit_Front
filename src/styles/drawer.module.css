@@ -9,8 +9,40 @@
   width: 620px;
   max-width: 100vw;
 }
+
+/* Drawer de detalle (solo lectura) -- 520px en el HTML aprobado, más angosto
+   que el de formulario porque no lleva campos en dos columnas. */
+.panelDetail {
+  width: 520px;
+  max-width: 100vw;
+}
+
 @media (max-width: 1000px) {
-  .panel {
+  .panel,
+  .panelDetail {
     width: 100vw;
   }
+}
+
+/* Scrollbar propia del panel (pedido explícito: que no se confunda con la
+   de la página, detrás del overlay). Riel más oscuro que el de la página
+   (globals.css usa --border-strong, gris claro) para que se note al primer
+   vistazo que se está dentro del drawer, no en el fondo. */
+.panel,
+.panelDetail {
+  scrollbar-color: var(--text-3) var(--gray-light);
+}
+.panel::-webkit-scrollbar,
+.panelDetail::-webkit-scrollbar {
+  width: 10px;
+}
+.panel::-webkit-scrollbar-track,
+.panelDetail::-webkit-scrollbar-track {
+  background: var(--gray-light);
+}
+.panel::-webkit-scrollbar-thumb,
+.panelDetail::-webkit-scrollbar-thumb {
+  background: var(--text-3);
+  border-radius: 20px;
+  border: 2px solid var(--gray-light);
 }

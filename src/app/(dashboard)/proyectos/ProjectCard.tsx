@@ -1,19 +1,28 @@
 "use client";
 
+import { Calendar, Pencil } from "lucide-react";
 import { Badge } from "@/components/ui/primitives";
-import { BRIEF_STATUS_COLORS, PROJECT_STATUS_COLORS, statusColor } from "@/lib/constants";
+import { PROJECT_STATUS_COLORS, statusColor } from "@/lib/constants";
 import { fmtDateShort } from "@/lib/format";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useClientesStore } from "@/store/clientes-store";
 import type { Proyecto } from "@/types/api";
 
-export function ProjectCard({ project, onOpen }: { project: Proyecto; onOpen: () => void }) {
+/** Miembro del equipo cuyo rol suena a "ejecutivo" -- el mockup asume un rol fijo con ese
+ * nombre exacto; nuestro `equipo` es una lista libre de {rol, nombre}, así que se busca por
+ * coincidencia parcial en vez de asumir una posición fija. */
+function ejecutivoDe(project: Proyecto): string | undefined {
+  return project.equipo.find((m) => m.rol?.toLowerCase().includes("ejecutivo"))?.nombre;
+}
+
+export function ProjectCard({ project, onOpen, onEdit }: { project: Proyecto; onOpen: () => void; onEdit: () => void }) {
   const { estadosProyecto } = useCatalogosStore();
   const { items: clientes } = useClientesStore();
   const estadoNombre = estadosProyecto.find((e) => e.id === project.estadoId)?.nombre ?? "—";
   const clienteNombre = clientes.find((c) => c.id === project.clienteId)?.nombre;
   const st = statusColor(PROJECT_STATUS_COLORS, estadoNombre);
-  const bst = statusColor(BRIEF_STATUS_COLORS, project.estadoBrief);
+  const ejecutivo = ejecutivoDe(project);
+  const fechaLabel = fmtDateShort(project.fechaEvento?.slice(0, 10)) || "Sin fecha";
 
   return (
     <div
@@ -21,34 +30,42 @@ export function ProjectCard({ project, onOpen }: { project: Proyecto; onOpen: ()
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), onOpen())}
-      className="cursor-pointer rounded-[var(--radius-md)] border border-border bg-surface p-3 transition-shadow hover:border-border-strong hover:shadow-sm"
+      className="flex cursor-pointer flex-col gap-3 rounded-[var(--radius-lg)] border border-border bg-surface p-4 transition-[border-color,box-shadow] hover:border-text hover:shadow-[0_2px_14px_rgba(12,12,12,0.07)]"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-[13px] font-semibold leading-tight">{project.nombre || "(Sin nombre)"}</div>
-          <div className="mt-0.5 truncate text-[11px] text-text-2">{clienteNombre || "Sin cliente"}</div>
+      <div className="min-w-0">
+        <div className="truncate text-[15px] font-semibold leading-tight tracking-[-0.015em]">
+          {project.nombre || "(Sin nombre)"}
         </div>
-        <span className="flex-shrink-0 text-[11px] text-text-2">{fmtDateShort(project.fechaEvento?.slice(0, 10))}</span>
+        <div className="mt-0.5 truncate text-xs text-text-3">{clienteNombre || "Sin cliente"}</div>
       </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-1">
+      <div className="flex items-center gap-[7px] truncate text-[13px] text-text-2">
+        <Calendar size={14} strokeWidth={1.8} className="flex-shrink-0 text-text-3" />
+        <span className="truncate">
+          {fechaLabel}
+          {ejecutivo && <> · {ejecutivo}</>}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-[#EFEDE7] pt-3">
         <Badge bg={st.bg} color={st.c}>
           {estadoNombre}
         </Badge>
-        <Badge bg={bst.bg} color={bst.c}>
-          {project.estadoBrief}
-        </Badge>
-      </div>
-
-      <div className="mt-2 flex items-center justify-between border-t border-border pt-2 text-[11px] text-text-2">
-        {project.proveedorIds.length > 0 ? (
-          <span>
-            {project.proveedorIds.length} proveedor{project.proveedorIds.length === 1 ? "" : "es"}
-          </span>
-        ) : (
-          <span className="font-medium text-red">Sin proveedores asignados</span>
-        )}
-        <span>{project.porcentajeAvance}%</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-text-3">
+          {project.proveedorIds.length} proveedor{project.proveedorIds.length === 1 ? "" : "es"}
+        </span>
+        <button
+          type="button"
+          aria-label={`Editar ${project.nombre}`}
+          title="Editar este proyecto"
+          onClick={(event) => {
+            event.stopPropagation();
+            onEdit();
+          }}
+          className="flex h-[30px] w-[30px] flex-shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-md)] border border-border bg-transparent text-text-2 transition-colors hover:border-text hover:bg-text hover:text-green"
+        >
+          <Pencil size={14} strokeWidth={1.8} />
+        </button>
       </div>
     </div>
   );

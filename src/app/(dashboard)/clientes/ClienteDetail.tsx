@@ -1,27 +1,97 @@
 "use client";
 
-import { ExternalLink, Pencil } from "lucide-react";
-import { Avatar, Button } from "@/components/ui/primitives";
-import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
-import { Drawer, DrawerBox, DrawerCloseButton, DrawerHeader, DrawerSection, KeyValue, NoteBox } from "@/components/ui/Drawer";
+import { useEffect, useState } from "react";
+import { ExternalLink, MessageCircle, Pencil } from "lucide-react";
+import { Avatar, Badge, CountryBadge } from "@/components/ui/primitives";
+import {
+  DetailBox,
+  DetailRow,
+  Drawer,
+  DrawerCloseButton,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerIconButton,
+} from "@/components/ui/Drawer";
+import { EntityAttachments } from "@/components/ui/EntityAttachments";
+import { CLIENT_STATUS_COLORS, statusColor } from "@/lib/constants";
+import { clienteAdjuntosApi } from "@/services/api/cliente-adjuntos-service";
+import { historialApi } from "@/services/api/historial-service";
+import { useCatalogosStore } from "@/store/catalogos-store";
 import { useUiStore } from "@/store/ui-store";
 import { toSafeHref } from "@/lib/url-safety";
-import type { Cliente } from "@/types/api";
+import type { Cliente, HistorialCambio, Proyecto } from "@/types/api";
 
+/** "Se cambió {campo} de "X" a "Y"" -- una fila del historial (docs/19/20), mismo texto que
+ * usaría cualquier otra pantalla que lo mostrara (esta es la primera en hacerlo). */
+function descripcionHistorial(h: HistorialCambio): string {
+  if (h.accion === "creacion") return "Se creó el registro";
+  if (h.accion === "eliminacion") return "Se eliminó el registro";
+  if (h.campo) {
+    const antes = h.valorAnterior?.trim() ? `"${h.valorAnterior}"` : "vacío";
+    const despues = h.valorNuevo?.trim() ? `"${h.valorNuevo}"` : "vacío";
+    return `${h.campo}: ${antes} → ${despues}`;
+  }
+  return "Se editó el registro";
+}
+
+function fmtFechaHora(iso: string): string {
+  return new Date(iso).toLocaleString("es-CO", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * Sin botón de eliminar: aquí solo se mira y se puede editar. Eliminar (o
+ * pedirlo, si no eres admin) vive dentro del formulario de edición -- ver
+ * ClienteFormModal -- para que no sea un clic accidental desde la vista de
+ * solo lectura.
+ */
 export function ClienteDetail({
   cliente,
+  proyectos,
   onClose,
   onEdit,
-  onDelete,
 }: {
   cliente: Cliente | null;
+  proyectos: Proyecto[];
   onClose: () => void;
   onEdit: () => void;
-  onDelete: () => void;
 }) {
   const pushToast = useUiStore((s) => s.pushToast);
+  const { paises, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } = useCatalogosStore();
+  const [historial, setHistorial] = useState<HistorialCambio[]>([]);
+  const [historialCargando, setHistorialCargando] = useState(false);
 
-  if (!cliente) return <Drawer open={false} onClose={onClose}><></></Drawer>;
+  useEffect(() => {
+    if (!cliente) return;
+    fetchBase();
+    if (cliente.paisId) fetchRegiones(cliente.paisId);
+    if (cliente.regionId) fetchCiudades(cliente.regionId);
+  }, [cliente, fetchBase, fetchRegiones, fetchCiudades]);
+
+  useEffect(() => {
+    if (!cliente) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el historial del cliente anterior al cerrar el drawer
+      setHistorial([]);
+      return;
+    }
+    let cancelado = false;
+    setHistorialCargando(true);
+    historialApi
+      .porEntidad("cliente", cliente.id)
+      .then((rows) => {
+        if (!cancelado) setHistorial(rows);
+      })
+      .catch(() => {
+        if (!cancelado) setHistorial([]);
+      })
+      .finally(() => {
+        if (!cancelado) setHistorialCargando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [cliente]);
+
+  if (!cliente) return <Drawer open={false} onClose={onClose} size="detail"><></></Drawer>;
 
   function copyContact() {
     if (!cliente) return;
@@ -30,94 +100,204 @@ export function ClienteDetail({
     navigator.clipboard?.writeText(txt).then(() => pushToast("Contacto copiado", "info"));
   }
 
+  const proyectosDelCliente = proyectos.filter((p) => p.clienteId === cliente.id);
+  const primerTelefono = cliente.telefonos[0]?.telefono;
+  const whatsappHref = primerTelefono ? `https://wa.me/${primerTelefono.replace(/[^\d]/g, "")}` : null;
+  const correoHref = cliente.email ? `mailto:${cliente.email}` : null;
+  const sc = statusColor(CLIENT_STATUS_COLORS, cliente.estado);
+  const paisNombre = paises.find((p) => p.id === cliente.paisId)?.nombre;
+  const regionNombre = regionesPorPais[cliente.paisId ?? ""]?.find((r) => r.id === cliente.regionId)?.nombre;
+  const ciudadNombre = ciudadesPorRegion[cliente.regionId ?? ""]?.find((c) => c.id === cliente.ciudadId)?.nombre ?? cliente.ciudad;
+
   return (
-    <Drawer open={Boolean(cliente)} onClose={onClose}>
+    <Drawer open={Boolean(cliente)} onClose={onClose} size="detail">
       <DrawerHeader>
         <Avatar nombre={cliente.nombre} size="lg" />
         <div className="min-w-0 flex-1">
-          <div className="text-[17px] font-semibold leading-tight">{cliente.nombre}</div>
-          <div className="mt-0.5 text-[13px] text-text-2">{cliente.sector || "Sin sector"}</div>
+          <div className="text-lg font-semibold leading-tight tracking-[-0.025em]">{cliente.nombre}</div>
+          <div className="mt-[3px] text-[13px] text-text-3">{cliente.sector || "Sin sector"}</div>
         </div>
-        <DrawerCloseButton onClose={onClose} />
+        <div className="flex flex-shrink-0 gap-1.5">
+          <DrawerIconButton label="Editar cliente" onClick={onEdit}>
+            <Pencil size={15} strokeWidth={1.8} />
+          </DrawerIconButton>
+          <DrawerCloseButton onClose={onClose} />
+        </div>
       </DrawerHeader>
 
-      <div className="flex-1 p-5">
-        <DrawerBox title="Ubicación">
-          <KeyValue k="Ciudad" v={cliente.ciudad || "—"} />
-          <KeyValue k="Dirección" v={cliente.direccion || "—"} />
-          <KeyValue
-            k="Sitio web"
-            v={
-            cliente.web ? (
-              (() => {
-                const href = toSafeHref(cliente.web);
-                // Si no es un http(s) válido (ej. alguien guardó algo tipo
-                // "javascript:...") no se vuelve un link clickeable -- se
-                // muestra el texto tal cual para que se pueda ver y corregir.
-                return href ? (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-teal-mid hover:underline"
-                  >
-                    {cliente.web} <ExternalLink size={11} strokeWidth={2} />
-                  </a>
-                ) : (
-                  cliente.web
-                );
-              })()
-            ) : (
-              "—"
-            )
-            }
-          />
-        </DrawerBox>
+      <div className="flex flex-1 flex-col gap-[18px] p-[22px]">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge bg={sc.bg} color={sc.c}>
+            {cliente.estado}
+          </Badge>
+          <Badge bg="#F1EFE8" color="#0C0C0C">
+            {proyectosDelCliente.length} proyecto{proyectosDelCliente.length === 1 ? "" : "s"}
+          </Badge>
+        </div>
 
-        <DrawerBox
+        <DetailBox
           title="Contacto"
           action={
             <button
               onClick={copyContact}
-              className="cursor-pointer border-none bg-transparent text-[11px] font-medium normal-case text-teal-mid hover:underline"
+              className="cursor-pointer border-none bg-transparent text-xs font-medium text-teal-mid hover:underline"
             >
               Copiar
             </button>
           }
         >
-          <KeyValue k="Contacto" v={cliente.contacto || "—"} />
-          <KeyValue k="Cargo" v={cliente.cargoContacto || "—"} />
-          <KeyValue k="Email" v={cliente.email || "—"} />
+          <DetailRow k="Persona" v={cliente.contacto || "—"} />
+          <DetailRow k="Cargo" v={cliente.cargoContacto || "—"} />
           {cliente.telefonos.length > 0 ? (
             cliente.telefonos.map((t, i) => (
-              <KeyValue key={t.id ?? i} k={t.etiqueta || "Teléfono"} v={t.telefono} />
+              <DetailRow
+                key={t.id ?? i}
+                k={t.etiqueta || "Teléfono"}
+                v={
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 flex-1 truncate">{t.telefono}</span>
+                    {i === 0 && whatsappHref && (
+                      <a
+                        href={whatsappHref}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:border-text hover:text-text"
+                        aria-label="Escribir por WhatsApp"
+                      >
+                        <MessageCircle size={12} strokeWidth={1.8} />
+                      </a>
+                    )}
+                  </span>
+                }
+              />
             ))
           ) : (
-            <KeyValue k="Teléfono" v="—" />
+            <DetailRow k="Teléfono" v="—" />
           )}
-        </DrawerBox>
+          <DetailRow
+            k="Correo"
+            v={
+              cliente.email ? (
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="min-w-0 flex-1 truncate">{cliente.email}</span>
+                  {correoHref && (
+                    <a
+                      href={correoHref}
+                      className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:border-text hover:text-text"
+                      aria-label="Escribir correo"
+                    >
+                      <ExternalLink size={12} strokeWidth={1.8} />
+                    </a>
+                  )}
+                </span>
+              ) : (
+                "—"
+              )
+            }
+          />
+        </DetailBox>
 
-        <DrawerBox title="Facturación">
-          <KeyValue k="Valor de referencia" v={cliente.valorReferencia || "—"} />
-        </DrawerBox>
+        <DetailBox title="Ubicación">
+          <DetailRow
+            k="País"
+            v={
+              paisNombre ? (
+                <span className="flex items-center gap-1.5">
+                  <CountryBadge pais={paisNombre} /> {paisNombre}
+                </span>
+              ) : (
+                "—"
+              )
+            }
+          />
+          <DetailRow k="Departamento" v={regionNombre || "—"} />
+          <DetailRow k="Ciudad" v={ciudadNombre || "—"} />
+          <DetailRow k="Dirección" v={cliente.direccion || "—"} />
+          <DetailRow
+            k="Sitio web"
+            v={
+              cliente.web ? (
+                (() => {
+                  const href = toSafeHref(cliente.web);
+                  // Si no es un http(s) válido (ej. alguien guardó algo tipo
+                  // "javascript:...") no se vuelve un link clickeable -- se
+                  // muestra el texto tal cual para que se pueda ver y corregir.
+                  return href ? (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-teal-mid hover:underline"
+                    >
+                      {cliente.web} <ExternalLink size={11} strokeWidth={2} />
+                    </a>
+                  ) : (
+                    cliente.web
+                  );
+                })()
+              ) : (
+                "—"
+              )
+            }
+          />
+        </DetailBox>
 
-        {cliente.notas && (
-          <>
-            <DrawerSection title="Notas internas" />
-            <NoteBox>{cliente.notas}</NoteBox>
-          </>
+        <DetailBox title="Facturación">
+          <DetailRow k="Valor de referencia" v={cliente.valorReferencia || "—"} />
+        </DetailBox>
+
+        <DetailBox title="Notas internas">
+          <p className="border-l-2 border-green pl-3 text-sm leading-relaxed text-text-2">
+            {cliente.notas || "Sin notas registradas."}
+          </p>
+        </DetailBox>
+
+        <DetailBox title="Archivos y enlaces" tone="plain">
+          <EntityAttachments entityId={cliente.id} api={clienteAdjuntosApi} />
+        </DetailBox>
+
+        <DetailBox title="Historial de cambios" tone="plain">
+          {historialCargando ? (
+            <div className="py-1 text-sm text-text-3">Cargando…</div>
+          ) : historial.length === 0 ? (
+            <div className="py-1 text-sm text-text-3">Todavía no hay cambios registrados.</div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {historial.map((h) => (
+                <div key={h.id} className="border-l-2 border-border pl-3 text-[13px]">
+                  <div>
+                    <b className="font-semibold">{h.usuarioNombre || "Alguien"}</b> {descripcionHistorial(h)}
+                  </div>
+                  <div className="font-mono text-[11px] text-text-3">{fmtFechaHora(h.fecha)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </DetailBox>
+      </div>
+
+      <DrawerFooter>
+        {whatsappHref && (
+          <a
+            href={whatsappHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-w-[130px] flex-1 items-center justify-center gap-2 rounded-[var(--radius-md)] bg-teal-mid px-3.5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+          >
+            <MessageCircle size={15} strokeWidth={1.8} />
+            WhatsApp
+          </a>
         )}
-
-        <DrawerSection title="Archivos y enlaces" />
-        <NoteBox>Sin archivos ni enlaces registrados.</NoteBox>
-      </div>
-
-      <div className="flex flex-wrap gap-2 border-t border-border p-4">
-        <Button variant="primary" icon={Pencil} onClick={onEdit}>
-          Editar
-        </Button>
-        <DeleteOrRequestButton tipoEntidad="cliente" entidadId={cliente.id} onDelete={onDelete} />
-      </div>
+        {correoHref && (
+          <a
+            href={correoHref}
+            className="inline-flex min-w-[130px] flex-1 items-center justify-center gap-2 rounded-[var(--radius-md)] border border-border bg-transparent px-3.5 py-2.5 text-sm font-medium text-text transition-colors hover:border-text hover:bg-bg"
+          >
+            <ExternalLink size={15} strokeWidth={1.8} />
+            Correo
+          </a>
+        )}
+      </DrawerFooter>
     </Drawer>
   );
 }

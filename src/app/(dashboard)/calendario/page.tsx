@@ -103,11 +103,14 @@ export default function CalendarioPage() {
     }
   }
 
+  // El "¿Eliminar a X?" ya lo confirma el diálogo propio de DeleteOrRequestButton (dentro de
+  // ProjectFormModal) -- esto solo se llama después de que un admin confirma ahí.
   async function handleDelete(id: string) {
-    if (!window.confirm("¿Eliminar este proyecto? Esta acción no se puede deshacer.")) return;
     try {
       await removeProject(id);
       setDetailId(null);
+      setFormOpen(false);
+      setEditing(null);
       pushToast("Proyecto eliminado", "success");
     } catch (err) {
       pushToast(err instanceof Error ? err.message : "No se pudo eliminar el proyecto", "danger");
@@ -215,7 +218,6 @@ export default function CalendarioPage() {
           setEditing(detailProject);
           setFormOpen(true);
         }}
-        onDelete={() => detailProject && handleDelete(detailProject.id)}
       />
 
       <ProjectFormModal
@@ -225,6 +227,7 @@ export default function CalendarioPage() {
           setEditing(null);
         }}
         onSave={handleSave}
+        onDelete={() => editing && handleDelete(editing.id)}
         editing={editing}
         providers={providers}
       />

@@ -43,6 +43,15 @@ export const PROVIDER_STATUS_COLORS: Record<string, { bg: string; c: string }> =
   Bloqueado: { bg: "#FCEBEB", c: "#791F1F" },
 };
 
+export const CLIENTE_ESTADOS = ["Activo", "Prospecto", "Inactivo"] as const;
+
+/** Valores literales de CLI_STATUS_COLORS del mockup aprobado (Claude Diseño). */
+export const CLIENT_STATUS_COLORS: Record<string, { bg: string; c: string }> = {
+  Activo: { bg: "#E4F9EE", c: "#036B3C" },
+  Prospecto: { bg: "#FBF0DC", c: "#7A4E00" },
+  Inactivo: { bg: "#F1EFE8", c: "#4A4845" },
+};
+
 export const PROJECT_STATUS_COLORS: Record<string, { bg: string; c: string }> = {
   "Planeación interna": { bg: "#F1EFE8", c: "#444441" },
   Planeación: { bg: "#EEEDFE", c: "#26215C" },
