@@ -1,6 +1,6 @@
 "use client";
 
-import { Calendar, Pencil } from "lucide-react";
+import { Calendar, MapPin, Pencil, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/primitives";
 import { PROJECT_STATUS_COLORS, statusColor } from "@/lib/constants";
 import { fmtDateShort } from "@/lib/format";
@@ -39,19 +39,28 @@ export function ProjectCard({ project, onOpen, onEdit }: { project: Proyecto; on
         <div className="mt-0.5 truncate text-xs text-text-3">{clienteNombre || "Sin cliente"}</div>
       </div>
 
-      <div className="flex items-center gap-[7px] truncate text-[13px] text-text-2">
-        <Calendar size={14} strokeWidth={1.8} className="flex-shrink-0 text-text-3" />
-        <span className="truncate">
-          {fechaLabel}
-          {ejecutivo && <> · {ejecutivo}</>}
-        </span>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-[7px] truncate text-[13px] text-text-2">
+          <Calendar size={14} strokeWidth={1.8} className="flex-shrink-0 text-text-3" />
+          <span className="truncate">
+            {fechaLabel}
+            {ejecutivo && <> · {ejecutivo}</>}
+          </span>
+        </div>
+        {project.ciudad && (
+          <div className="flex items-center gap-[7px] truncate text-[13px] text-text-2">
+            <MapPin size={14} strokeWidth={1.8} className="flex-shrink-0 text-text-3" />
+            <span className="truncate">{project.ciudad}</span>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-[#EFEDE7] pt-3">
         <Badge bg={st.bg} color={st.c}>
           {estadoNombre}
         </Badge>
-        <span className="min-w-0 flex-1 truncate text-xs text-text-3">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-xs text-text-3">
+          <Truck size={13} strokeWidth={1.8} className="flex-shrink-0" />
           {project.proveedorIds.length} proveedor{project.proveedorIds.length === 1 ? "" : "es"}
         </span>
         <button

@@ -256,75 +256,80 @@ export default function ProyectosPage() {
         <EmptyState icon={AlertTriangle} title={error} tone="danger" action={{ label: "Reintentar", onClick: fetchAll }} />
       ) : filtered.length === 0 ? (
         <EmptyState icon={FolderKanban} title="No se encontraron proyectos con estos filtros." />
-      ) : view === "cards" ? (
-        <div className="flex flex-col gap-3">
-          <div className={styles.cardsGrid}>
-            {pageRows.map((p) => (
-              <ProjectCard
-                key={p.id}
-                project={p}
-                onOpen={() => setDetailId(p.id)}
-                onEdit={() => {
-                  setEditing(p);
-                  setFormOpen(true);
-                }}
-              />
-            ))}
-          </div>
-          <div className="rounded-[var(--radius-lg)] border border-border bg-surface px-4 py-3">{paginationBar}</div>
-        </div>
       ) : (
-        <Table footer={paginationBar}>
-          <Thead>
-            <Th>Proyecto</Th>
-            <Th>Cliente</Th>
-            <Th>Fecha</Th>
-            <Th>Estado</Th>
-            <Th>Ejecutivo</Th>
-            <Th className="text-right">Acciones</Th>
-          </Thead>
-          <tbody>
-            {pageRows.map((p) => {
-              const estadoNombre = estadosProyecto.find((e) => e.id === p.estadoId)?.nombre ?? "—";
-              const clienteNombre = clientes.find((c) => c.id === p.clienteId)?.nombre;
-              const st = statusColor(PROJECT_STATUS_COLORS, estadoNombre);
-              return (
-                <Tr key={p.id} onClick={() => setDetailId(p.id)}>
-                  <Td className="font-medium">{p.nombre || "(Sin nombre)"}</Td>
-                  <Td className="text-text-2">{clienteNombre || "Sin cliente"}</Td>
-                  <Td className="text-text-2">{fmtDateShort(p.fechaEvento?.slice(0, 10)) || "—"}</Td>
-                  <Td>
-                    <Badge bg={st.bg} color={st.c}>
-                      {estadoNombre}
-                    </Badge>
-                  </Td>
-                  <Td className="text-text-2">{ejecutivoDe(p)}</Td>
-                  <Td>
-                    <div className="flex justify-end gap-1.5">
-                      <RowAction
-                        label="Editar este proyecto"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditing(p);
-                          setFormOpen(true);
-                        }}
-                      >
-                        <Pencil size={14} strokeWidth={1.8} />
-                      </RowAction>
-                      <DeleteOrRequestButton
-                        compact
-                        tipoEntidad="proyecto"
-                        entidadId={p.id}
-                        nombre={p.nombre}
-                        onDelete={() => handleDelete(p.id)}
-                      />
-                    </div>
-                  </Td>
-                </Tr>
-              );
-            })}
-          </tbody>
-        </Table>
+        <div className="flex flex-col gap-3">
+          {/* Antes vivía debajo de las tarjetas/tabla -- Alicia pidió subirla arriba,
+             junto a los filtros, porque abajo quedaba pegada a la izquierda con
+             mucho espacio muerto al lado cuando había pocos resultados. */}
+          <div className="border-b border-border pb-3">{paginationBar}</div>
+          {view === "cards" ? (
+            <div className={styles.cardsGrid}>
+              {pageRows.map((p) => (
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  onOpen={() => setDetailId(p.id)}
+                  onEdit={() => {
+                    setEditing(p);
+                    setFormOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <Thead>
+                <Th>Proyecto</Th>
+                <Th>Cliente</Th>
+                <Th>Fecha</Th>
+                <Th>Estado</Th>
+                <Th>Ejecutivo</Th>
+                <Th className="text-right">Acciones</Th>
+              </Thead>
+              <tbody>
+                {pageRows.map((p) => {
+                  const estadoNombre = estadosProyecto.find((e) => e.id === p.estadoId)?.nombre ?? "—";
+                  const clienteNombre = clientes.find((c) => c.id === p.clienteId)?.nombre;
+                  const st = statusColor(PROJECT_STATUS_COLORS, estadoNombre);
+                  return (
+                    <Tr key={p.id} onClick={() => setDetailId(p.id)}>
+                      <Td className="font-medium">{p.nombre || "(Sin nombre)"}</Td>
+                      <Td className="text-text-2">{clienteNombre || "Sin cliente"}</Td>
+                      <Td className="text-text-2">{fmtDateShort(p.fechaEvento?.slice(0, 10)) || "—"}</Td>
+                      <Td>
+                        <Badge bg={st.bg} color={st.c}>
+                          {estadoNombre}
+                        </Badge>
+                      </Td>
+                      <Td className="text-text-2">{ejecutivoDe(p)}</Td>
+                      <Td>
+                        <div className="flex justify-end gap-1.5">
+                          <RowAction
+                            label="Editar este proyecto"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditing(p);
+                              setFormOpen(true);
+                            }}
+                          >
+                            <Pencil size={14} strokeWidth={1.8} />
+                          </RowAction>
+                          <DeleteOrRequestButton
+                            compact
+                            tipoEntidad="proyecto"
+                            entidadId={p.id}
+                            nombre={p.nombre}
+                            onDelete={() => handleDelete(p.id)}
+                          />
+                        </div>
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </div>
       )}
 
       <ProjectFormModal

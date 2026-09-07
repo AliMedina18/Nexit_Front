@@ -136,7 +136,7 @@ export default function ProveedoresPage() {
     return providers.filter((p) => {
       const matchesSearch =
         !s ||
-        [p.nombre, p.contacto, p.email, ...p.telefonos.map((t) => t.telefono)].some((v) => v?.toLowerCase().includes(s));
+        [p.nombre, p.contacto, ...p.telefonos.map((t) => t.telefono), ...p.emails.map((e) => e.email)].some((v) => v?.toLowerCase().includes(s));
       const matchesPais = !filtPais || p.paisId === filtPais;
       const matchesRegion = !filtRegion || p.regionId === filtRegion;
       const matchesCiudad = !filtCiudad || p.ciudadId === filtCiudad;
@@ -229,6 +229,19 @@ export default function ProveedoresPage() {
   }
 
   const detailProvider = detailId ? (providers.find((p) => p.id === detailId) ?? null) : null;
+
+  const paginationBar = (
+    <Pagination
+      total={filtered.length}
+      page={currentPage}
+      perPage={perPage}
+      onPageChange={setPage}
+      onPerPageChange={(n) => {
+        setPerPage(n);
+        setPage(1);
+      }}
+    />
+  );
 
   return (
     <div>
@@ -334,118 +347,99 @@ export default function ProveedoresPage() {
         <EmptyState icon={AlertTriangle} title={error} tone="danger" action={{ label: "Reintentar", onClick: fetchAll }} />
       ) : filtered.length === 0 ? (
         <EmptyState icon={FolderOpen} title="No se encontraron proveedores con estos filtros." />
-      ) : view === "cards" ? (
-        <div className="flex flex-col gap-3">
-          <div className={styles.cardsGrid}>
-            {pageRows.map((p) => (
-              <ProviderCard
-                key={p.id}
-                provider={p}
-                onOpen={() => setDetailId(p.id)}
-                onEdit={() => {
-                  setEditing(p);
-                  setFormOpen(true);
-                }}
-              />
-            ))}
-          </div>
-          <div className="rounded-[var(--radius-lg)] border border-border bg-surface px-4 py-3">
-            <Pagination
-              total={filtered.length}
-              page={currentPage}
-              perPage={perPage}
-              onPageChange={setPage}
-              onPerPageChange={(n) => {
-                setPerPage(n);
-                setPage(1);
-              }}
-            />
-          </div>
-        </div>
       ) : (
-        <Table
-          footer={
-            <Pagination
-              total={filtered.length}
-              page={currentPage}
-              perPage={perPage}
-              onPageChange={setPage}
-              onPerPageChange={(n) => {
-                setPerPage(n);
-                setPage(1);
-              }}
-            />
-          }
-        >
-          <Thead>
-            <Th>Proveedor</Th>
-            <Th>Categoría</Th>
-            <Th>Ubicación</Th>
-            <Th>Estado</Th>
-            <Th>Contacto</Th>
-            <Th className="text-right">Acciones</Th>
-          </Thead>
-          <tbody>
-            {pageRows.map((p) => {
-              const sc = statusColor(PROVIDER_STATUS_COLORS, p.estado);
-              const paisNombre = paises.find((x) => x.id === p.paisId)?.nombre;
-              const regionNombre = regionesPorPais[p.paisId ?? ""]?.find((r) => r.id === p.regionId)?.nombre;
-              const ciudadNombre = ciudadesPorRegion[p.regionId ?? ""]?.find((c) => c.id === p.ciudadId)?.nombre;
-              const categoriaNombre = categoriasProveedor.find((c) => c.id === p.categoriaId)?.nombre;
-              const ubicacion = [ciudadNombre, regionNombre, paisNombre].filter(Boolean).join(" · ");
-              return (
-                <Tr key={p.id} onClick={() => setDetailId(p.id)}>
-                  <Td>
-                    <div className="flex items-center gap-2.5">
-                      <Avatar nombre={p.nombre} size="sm" />
-                      <span className="font-medium">{p.nombre}</span>
-                    </div>
-                  </Td>
-                  <Td className="text-text-2">{categoriaNombre || "—"}</Td>
-                  <Td className="text-text-2">
-                    {ubicacion ? (
-                      <span className="flex items-center gap-1.5">
-                        <CountryBadge pais={paisNombre} /> {ubicacion}
-                      </span>
-                    ) : (
-                      "—"
-                    )}
-                  </Td>
-                  <Td>
-                    <Badge bg={sc.bg} color={sc.c}>
-                      {p.estado}
-                    </Badge>
-                  </Td>
-                  <Td className="text-text-2">
-                    {p.contacto || "—"}
-                    {p.contacto && p.cargoContacto && <Tag className="ml-1.5">{p.cargoContacto}</Tag>}
-                  </Td>
-                  <Td>
-                    <div className="flex justify-end gap-1.5">
-                      <RowAction
-                        label="Editar este proveedor"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditing(p);
-                          setFormOpen(true);
-                        }}
-                      >
-                        <Pencil size={14} strokeWidth={1.8} />
-                      </RowAction>
-                      <DeleteOrRequestButton
-                        compact
-                        tipoEntidad="proveedor"
-                        entidadId={p.id}
-                        nombre={p.nombre}
-                        onDelete={() => handleDelete(p.id)}
-                      />
-                    </div>
-                  </Td>
-                </Tr>
-              );
-            })}
-          </tbody>
-        </Table>
+        <div className="flex flex-col gap-3">
+          {/* Antes vivía debajo de las tarjetas/tabla -- Alicia pidió subirla arriba,
+             junto a los filtros, porque abajo quedaba pegada a la izquierda con
+             mucho espacio muerto al lado cuando había pocos resultados. */}
+          <div className="border-b border-border pb-3">{paginationBar}</div>
+          {view === "cards" ? (
+            <div className={styles.cardsGrid}>
+              {pageRows.map((p) => (
+                <ProviderCard
+                  key={p.id}
+                  provider={p}
+                  onOpen={() => setDetailId(p.id)}
+                  onEdit={() => {
+                    setEditing(p);
+                    setFormOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <Thead>
+                <Th>Proveedor</Th>
+                <Th>Categoría</Th>
+                <Th>Ubicación</Th>
+                <Th>Estado</Th>
+                <Th>Contacto</Th>
+                <Th className="text-right">Acciones</Th>
+              </Thead>
+              <tbody>
+                {pageRows.map((p) => {
+                  const sc = statusColor(PROVIDER_STATUS_COLORS, p.estado);
+                  const paisNombre = paises.find((x) => x.id === p.paisId)?.nombre;
+                  const regionNombre = regionesPorPais[p.paisId ?? ""]?.find((r) => r.id === p.regionId)?.nombre;
+                  const ciudadNombre = ciudadesPorRegion[p.regionId ?? ""]?.find((c) => c.id === p.ciudadId)?.nombre;
+                  const categoriaNombre = categoriasProveedor.find((c) => c.id === p.categoriaId)?.nombre;
+                  const ubicacion = [ciudadNombre, regionNombre, paisNombre].filter(Boolean).join(" · ");
+                  return (
+                    <Tr key={p.id} onClick={() => setDetailId(p.id)}>
+                      <Td>
+                        <div className="flex items-center gap-2.5">
+                          <Avatar nombre={p.nombre} size="sm" />
+                          <span className="font-medium">{p.nombre}</span>
+                        </div>
+                      </Td>
+                      <Td className="text-text-2">{categoriaNombre || "—"}</Td>
+                      <Td className="text-text-2">
+                        {ubicacion ? (
+                          <span className="flex items-center gap-1.5">
+                            <CountryBadge pais={paisNombre} /> {ubicacion}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </Td>
+                      <Td>
+                        <Badge bg={sc.bg} color={sc.c}>
+                          {p.estado}
+                        </Badge>
+                      </Td>
+                      <Td className="text-text-2">
+                        {p.contacto || "—"}
+                        {p.contacto && p.cargoContacto && <Tag className="ml-1.5">{p.cargoContacto}</Tag>}
+                      </Td>
+                      <Td>
+                        <div className="flex justify-end gap-1.5">
+                          <RowAction
+                            label="Editar este proveedor"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditing(p);
+                              setFormOpen(true);
+                            }}
+                          >
+                            <Pencil size={14} strokeWidth={1.8} />
+                          </RowAction>
+                          <DeleteOrRequestButton
+                            compact
+                            tipoEntidad="proveedor"
+                            entidadId={p.id}
+                            nombre={p.nombre}
+                            onDelete={() => handleDelete(p.id)}
+                          />
+                        </div>
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </div>
       )}
 
       <ProviderFormModal

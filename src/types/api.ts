@@ -22,6 +22,13 @@ export interface ClienteTelefono {
   etiqueta?: string | null;
 }
 
+/** Lista simple de correos, sin "principal" (2026-09-06) -- mismo patrón que ClienteTelefono: un cliente puede tener más de uno. */
+export interface ClienteEmail {
+  id?: string;
+  email: string;
+  etiqueta?: string | null;
+}
+
 export interface ClienteInput {
   nombre: string;
   sector?: string | null;
@@ -29,15 +36,17 @@ export interface ClienteInput {
   regionId?: string | null;
   ciudadId?: string | null;
   estado: string; // "Activo" | "Prospecto" | "Inactivo"
+  /** Etapa del proceso comercial (catálogo EtapaCliente, docs/33) -- distinta de `estado`. Opcional. */
+  etapaId?: string | null;
   ciudad?: string | null;
   direccion?: string | null;
   web?: string | null;
   contacto?: string | null;
   cargoContacto?: string | null;
-  email?: string | null;
   valorReferencia?: string | null;
   notas?: string | null;
   telefonos: ClienteTelefono[];
+  emails: ClienteEmail[];
 }
 
 export interface Cliente extends ClienteInput {
@@ -85,6 +94,13 @@ export interface ProveedorTelefono {
   etiqueta?: string | null;
 }
 
+/** Lista simple de correos, sin "principal" (2026-09-06) -- ver el comentario equivalente en ClienteEmail. */
+export interface ProveedorEmail {
+  id?: string;
+  email: string;
+  etiqueta?: string | null;
+}
+
 export interface ProveedorInput {
   nombre: string;
   paisId: string;
@@ -94,7 +110,6 @@ export interface ProveedorInput {
   estado: string; // "Activo" | "En evaluación" | "Pausado" | "Bloqueado"
   contacto?: string | null;
   cargoContacto?: string | null;
-  email?: string | null;
   web?: string | null;
   direccion?: string | null;
   aforo?: number | null;
@@ -104,6 +119,7 @@ export interface ProveedorInput {
   cobertura?: string | null;
   notas?: string | null;
   telefonos: ProveedorTelefono[];
+  emails: ProveedorEmail[];
   servicioIds: string[];
 }
 
@@ -252,6 +268,9 @@ export interface ProyectoCalendarioItem {
   id: string;
   nombre: string;
   fechaEvento: string;
+  /** "yyyy-MM-dd" ya convertida a la hora local de la sede del proyecto (docs/18) -- úsala para
+   * decidir el día en el que pintarlo en el calendario, NO cortes `fechaEvento` (sigue en UTC). */
+  fechaEventoLocal: string;
   clienteId?: string | null;
   clienteNombre?: string | null;
   estadoNombre: string;
@@ -381,8 +400,22 @@ export interface EstadoProyectoInput {
   orden: number;
 }
 
+/** Etapa del proceso comercial de un Cliente (E1-E6, docs/33) -- distinta de EstadoProyecto: esta vive
+ * en el Cliente, no en el Proyecto, y cubre las etapas E1/E2 que ocurren antes de que exista un brief. */
+export interface EtapaCliente {
+  id: string;
+  nombre: string;
+  orden: number;
+  porcentajeProceso: number;
+}
+export interface EtapaClienteInput {
+  nombre: string;
+  orden: number;
+  porcentajeProceso: number;
+}
+
 /** Los `tipo` válidos para DELETE /api/catalogos/{tipo}/{id} -- ver CatalogosService en el backend. */
-export type CatalogoTipo = "paises" | "regiones" | "ciudades" | "categorias-proveedor" | "servicios" | "estados-proyecto";
+export type CatalogoTipo = "paises" | "regiones" | "ciudades" | "categorias-proveedor" | "servicios" | "estados-proyecto" | "etapas-cliente";
 
 // ---------------------------------------------------------------------------
 // Solicitudes de eliminación
@@ -509,5 +542,7 @@ export interface ImportarError {
 
 export interface ImportarResultado {
   creados: number;
+  /** Filas que ya existían (mismo Nombre, o Cliente+Nombre en Proyectos) y se actualizaron en vez de duplicarse (docs/35). */
+  actualizados: number;
   errores: ImportarError[];
 }

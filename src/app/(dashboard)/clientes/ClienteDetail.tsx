@@ -56,7 +56,7 @@ export function ClienteDetail({
   onEdit: () => void;
 }) {
   const pushToast = useUiStore((s) => s.pushToast);
-  const { paises, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } = useCatalogosStore();
+  const { paises, etapasCliente, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } = useCatalogosStore();
   const [historial, setHistorial] = useState<HistorialCambio[]>([]);
   const [historialCargando, setHistorialCargando] = useState(false);
 
@@ -96,15 +96,20 @@ export function ClienteDetail({
   function copyContact() {
     if (!cliente) return;
     const telefonos = cliente.telefonos.map((t) => t.telefono).join(", ");
-    const txt = `${cliente.nombre}\n${cliente.contacto ?? ""}\n${telefonos}\n${cliente.email ?? ""}`;
+    const emails = cliente.emails.map((e) => e.email).join(", ");
+    const txt = `${cliente.nombre}\n${cliente.contacto ?? ""}\n${telefonos}\n${emails}`;
     navigator.clipboard?.writeText(txt).then(() => pushToast("Contacto copiado", "info"));
   }
 
   const proyectosDelCliente = proyectos.filter((p) => p.clienteId === cliente.id);
   const primerTelefono = cliente.telefonos[0]?.telefono;
   const whatsappHref = primerTelefono ? `https://wa.me/${primerTelefono.replace(/[^\d]/g, "")}` : null;
-  const correoHref = cliente.email ? `mailto:${cliente.email}` : null;
+  // El botón de acción del pie usa el primer correo de la lista -- ver DetailBox "Contacto" para el
+  // resto (ese sí lista todos).
+  const primerEmail = cliente.emails[0]?.email;
+  const correoHref = primerEmail ? `mailto:${primerEmail}` : null;
   const sc = statusColor(CLIENT_STATUS_COLORS, cliente.estado);
+  const etapa = etapasCliente.find((e) => e.id === cliente.etapaId);
   const paisNombre = paises.find((p) => p.id === cliente.paisId)?.nombre;
   const regionNombre = regionesPorPais[cliente.paisId ?? ""]?.find((r) => r.id === cliente.regionId)?.nombre;
   const ciudadNombre = ciudadesPorRegion[cliente.regionId ?? ""]?.find((c) => c.id === cliente.ciudadId)?.nombre ?? cliente.ciudad;
@@ -130,6 +135,11 @@ export function ClienteDetail({
           <Badge bg={sc.bg} color={sc.c}>
             {cliente.estado}
           </Badge>
+          {etapa && (
+            <Badge bg="var(--gray-light)" color="var(--text-2)">
+              {etapa.nombre} · {etapa.porcentajeProceso}%
+            </Badge>
+          )}
           <Badge bg="#F1EFE8" color="#0C0C0C">
             {proyectosDelCliente.length} proyecto{proyectosDelCliente.length === 1 ? "" : "s"}
           </Badge>
@@ -174,27 +184,28 @@ export function ClienteDetail({
           ) : (
             <DetailRow k="Teléfono" v="—" />
           )}
-          <DetailRow
-            k="Correo"
-            v={
-              cliente.email ? (
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="min-w-0 flex-1 truncate">{cliente.email}</span>
-                  {correoHref && (
+          {cliente.emails.length > 0 ? (
+            cliente.emails.map((e, i) => (
+              <DetailRow
+                key={e.id ?? i}
+                k={e.etiqueta || "Correo"}
+                v={
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 flex-1 truncate">{e.email}</span>
                     <a
-                      href={correoHref}
+                      href={`mailto:${e.email}`}
                       className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:border-text hover:text-text"
                       aria-label="Escribir correo"
                     >
                       <ExternalLink size={12} strokeWidth={1.8} />
                     </a>
-                  )}
-                </span>
-              ) : (
-                "—"
-              )
-            }
-          />
+                  </span>
+                }
+              />
+            ))
+          ) : (
+            <DetailRow k="Correo" v="—" />
+          )}
         </DetailBox>
 
         <DetailBox title="Ubicación">

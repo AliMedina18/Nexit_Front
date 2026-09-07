@@ -76,12 +76,16 @@ export function ProviderDetail({
   })();
 
   const whatsappHref = numeroWhatsApp ? `https://wa.me/${numeroWhatsApp}` : null;
-  const correoHref = provider.email ? `mailto:${provider.email}` : null;
+  // El botón de acción del pie usa el primer correo de la lista -- ver DetailBox "Contacto" para el
+  // resto (ese sí lista todos).
+  const primerEmail = provider.emails[0]?.email;
+  const correoHref = primerEmail ? `mailto:${primerEmail}` : null;
 
   function copyContact() {
     if (!provider) return;
     const telefonos = provider.telefonos.map((t) => t.telefono).join(", ");
-    const txt = `${provider.nombre}\n${provider.contacto ?? ""}\n${telefonos}\n${provider.email ?? ""}`;
+    const emails = provider.emails.map((e) => e.email).join(", ");
+    const txt = `${provider.nombre}\n${provider.contacto ?? ""}\n${telefonos}\n${emails}`;
     navigator.clipboard?.writeText(txt).then(() => pushToast("Contacto copiado", "info"));
   }
 
@@ -176,27 +180,28 @@ export function ProviderDetail({
           ) : (
             <DetailRow k="Teléfono" v="—" />
           )}
-          <DetailRow
-            k="Correo"
-            v={
-              provider.email ? (
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="min-w-0 flex-1 truncate">{provider.email}</span>
-                  {correoHref && (
+          {provider.emails.length > 0 ? (
+            provider.emails.map((e, i) => (
+              <DetailRow
+                key={e.id ?? i}
+                k={e.etiqueta || "Correo"}
+                v={
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="min-w-0 flex-1 truncate">{e.email}</span>
                     <a
-                      href={correoHref}
+                      href={`mailto:${e.email}`}
                       className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2 hover:border-text hover:text-text"
                       aria-label="Escribir correo"
                     >
                       <ExternalLink size={12} strokeWidth={1.8} />
                     </a>
-                  )}
-                </span>
-              ) : (
-                "—"
-              )
-            }
-          />
+                  </span>
+                }
+              />
+            ))
+          ) : (
+            <DetailRow k="Correo" v="—" />
+          )}
         </DetailBox>
 
         <DetailBox title="Ubicación">

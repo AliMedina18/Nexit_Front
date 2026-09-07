@@ -5,6 +5,8 @@ import type {
   CiudadInput,
   EstadoProyecto,
   EstadoProyectoInput,
+  EtapaCliente,
+  EtapaClienteInput,
   FaseProyecto,
   ItemCatalogo,
   Pais,
@@ -53,6 +55,12 @@ export const catalogosApi = {
     list: (fase?: number) => apiClient.get<EstadoProyecto[]>(`/api/catalogos/estados-proyecto${fase !== undefined ? `?fase=${fase}` : ""}`),
     create: (input: EstadoProyectoInput) => apiClient.post<EstadoProyecto>("/api/catalogos/estados-proyecto", input),
     update: (id: string, input: EstadoProyectoInput) => apiClient.put<EstadoProyecto>(`/api/catalogos/estados-proyecto/${id}`, input),
+  },
+  /** Etapa comercial del cliente (E1-E6, docs/33) -- distinta de estadosProyecto: vive en Cliente, no en Proyecto. */
+  etapasCliente: {
+    list: () => apiClient.get<EtapaCliente[]>("/api/catalogos/etapas-cliente"),
+    create: (input: EtapaClienteInput) => apiClient.post<EtapaCliente>("/api/catalogos/etapas-cliente", input),
+    update: (id: string, input: EtapaClienteInput) => apiClient.put<EtapaCliente>(`/api/catalogos/etapas-cliente/${id}`, input),
   },
   /** DELETE genérico -- `tipo` es el segmento de ruta usado para crear ese catálogo (ej. "paises", "estados-proyecto"). */
   remove: (tipo: CatalogoTipo, id: string) => apiClient.delete<void>(`/api/catalogos/${tipo}/${id}`),

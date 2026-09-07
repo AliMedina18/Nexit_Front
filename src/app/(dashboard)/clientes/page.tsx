@@ -107,7 +107,7 @@ export default function ClientesPage() {
     return clientes.filter((c) => {
       const matchesSearch =
         !s ||
-        [c.nombre, c.sector, c.ciudad, c.contacto, c.email, ...c.telefonos.map((t) => t.telefono)].some((v) =>
+        [c.nombre, c.sector, c.ciudad, c.contacto, ...c.telefonos.map((t) => t.telefono), ...c.emails.map((e) => e.email)].some((v) =>
           v?.toLowerCase().includes(s),
         );
       const matchesSector = !filtSector || c.sector === filtSector;
@@ -188,6 +188,19 @@ export default function ClientesPage() {
 
   const detailCliente = detailId ? (clientes.find((c) => c.id === detailId) ?? null) : null;
 
+  const paginationBar = (
+    <Pagination
+      total={filtered.length}
+      page={currentPage}
+      perPage={perPage}
+      onPageChange={setPage}
+      onPerPageChange={(n) => {
+        setPerPage(n);
+        setPage(1);
+      }}
+    />
+  );
+
   return (
     <div>
       <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">Base de datos</div>
@@ -240,109 +253,90 @@ export default function ClientesPage() {
         <EmptyState icon={AlertTriangle} title={error} tone="danger" action={{ label: "Reintentar", onClick: fetchAll }} />
       ) : filtered.length === 0 ? (
         <EmptyState icon={Building2} title="No se encontraron clientes con estos filtros." />
-      ) : view === "cards" ? (
-        <div className="flex flex-col gap-3">
-          <div className={styles.cardsGrid}>
-            {pageRows.map((c) => (
-              <ClienteCard
-                key={c.id}
-                cliente={c}
-                onOpen={() => setDetailId(c.id)}
-                onEdit={() => {
-                  setEditing(c);
-                  setFormOpen(true);
-                }}
-              />
-            ))}
-          </div>
-          <div className="rounded-[var(--radius-lg)] border border-border bg-surface px-4 py-3">
-            <Pagination
-              total={filtered.length}
-              page={currentPage}
-              perPage={perPage}
-              onPageChange={setPage}
-              onPerPageChange={(n) => {
-                setPerPage(n);
-                setPage(1);
-              }}
-            />
-          </div>
-        </div>
       ) : (
-        <Table
-          footer={
-            <Pagination
-              total={filtered.length}
-              page={currentPage}
-              perPage={perPage}
-              onPageChange={setPage}
-              onPerPageChange={(n) => {
-                setPerPage(n);
-                setPage(1);
-              }}
-            />
-          }
-        >
-          <Thead>
-            <Th>Cliente</Th>
-            <Th>Industria</Th>
-            <Th>Ubicación</Th>
-            <Th>Estado</Th>
-            <Th>Contacto</Th>
-            <Th className="text-right">Acciones</Th>
-          </Thead>
-          <tbody>
-            {pageRows.map((c) => {
-              const sc = statusColor(CLIENT_STATUS_COLORS, c.estado);
-              const paisNombre = paises.find((p) => p.id === c.paisId)?.nombre;
-              const regionNombre = regionesPorPais[c.paisId ?? ""]?.find((r) => r.id === c.regionId)?.nombre;
-              const ciudadNombre = ciudadesPorRegion[c.regionId ?? ""]?.find((x) => x.id === c.ciudadId)?.nombre;
-              const ubicacion = [ciudadNombre, regionNombre, paisNombre].filter(Boolean).join(" · ") || c.ciudad;
-              return (
-              <Tr key={c.id} onClick={() => setDetailId(c.id)}>
-                <Td>
-                  <div className="flex items-center gap-2.5">
-                    <Avatar nombre={c.nombre} size="sm" />
-                    <span className="font-medium">{c.nombre}</span>
-                  </div>
-                </Td>
-                <Td className="text-text-2">{c.sector || "—"}</Td>
-                <Td className="text-text-2">{ubicacion || "—"}</Td>
-                <Td>
-                  <Badge bg={sc.bg} color={sc.c}>
-                    {c.estado}
-                  </Badge>
-                </Td>
-                <Td className="text-text-2">
-                  {c.contacto || "—"}
-                  {c.contacto && c.cargoContacto && <Tag className="ml-1.5">{c.cargoContacto}</Tag>}
-                </Td>
-                <Td>
-                  <div className="flex justify-end gap-1.5">
-                    <RowAction
-                      label="Editar este cliente"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditing(c);
-                        setFormOpen(true);
-                      }}
-                    >
-                      <Pencil size={14} strokeWidth={1.8} />
-                    </RowAction>
-                    <DeleteOrRequestButton
-                      compact
-                      tipoEntidad="cliente"
-                      entidadId={c.id}
-                      nombre={c.nombre}
-                      onDelete={() => handleDelete(c.id)}
-                    />
-                  </div>
-                </Td>
-              </Tr>
-              );
-            })}
-          </tbody>
-        </Table>
+        <div className="flex flex-col gap-3">
+          {/* Antes vivía debajo de las tarjetas/tabla -- Alicia pidió subirla arriba,
+             junto a los filtros, porque abajo quedaba pegada a la izquierda con
+             mucho espacio muerto al lado cuando había pocos resultados. */}
+          <div className="border-b border-border pb-3">{paginationBar}</div>
+          {view === "cards" ? (
+            <div className={styles.cardsGrid}>
+              {pageRows.map((c) => (
+                <ClienteCard
+                  key={c.id}
+                  cliente={c}
+                  onOpen={() => setDetailId(c.id)}
+                  onEdit={() => {
+                    setEditing(c);
+                    setFormOpen(true);
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <Table>
+              <Thead>
+                <Th>Cliente</Th>
+                <Th>Industria</Th>
+                <Th>Ubicación</Th>
+                <Th>Estado</Th>
+                <Th>Contacto</Th>
+                <Th className="text-right">Acciones</Th>
+              </Thead>
+              <tbody>
+                {pageRows.map((c) => {
+                  const sc = statusColor(CLIENT_STATUS_COLORS, c.estado);
+                  const paisNombre = paises.find((p) => p.id === c.paisId)?.nombre;
+                  const regionNombre = regionesPorPais[c.paisId ?? ""]?.find((r) => r.id === c.regionId)?.nombre;
+                  const ciudadNombre = ciudadesPorRegion[c.regionId ?? ""]?.find((x) => x.id === c.ciudadId)?.nombre;
+                  const ubicacion = [ciudadNombre, regionNombre, paisNombre].filter(Boolean).join(" · ") || c.ciudad;
+                  return (
+                  <Tr key={c.id} onClick={() => setDetailId(c.id)}>
+                    <Td>
+                      <div className="flex items-center gap-2.5">
+                        <Avatar nombre={c.nombre} size="sm" />
+                        <span className="font-medium">{c.nombre}</span>
+                      </div>
+                    </Td>
+                    <Td className="text-text-2">{c.sector || "—"}</Td>
+                    <Td className="text-text-2">{ubicacion || "—"}</Td>
+                    <Td>
+                      <Badge bg={sc.bg} color={sc.c}>
+                        {c.estado}
+                      </Badge>
+                    </Td>
+                    <Td className="text-text-2">
+                      {c.contacto || "—"}
+                      {c.contacto && c.cargoContacto && <Tag className="ml-1.5">{c.cargoContacto}</Tag>}
+                    </Td>
+                    <Td>
+                      <div className="flex justify-end gap-1.5">
+                        <RowAction
+                          label="Editar este cliente"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditing(c);
+                            setFormOpen(true);
+                          }}
+                        >
+                          <Pencil size={14} strokeWidth={1.8} />
+                        </RowAction>
+                        <DeleteOrRequestButton
+                          compact
+                          tipoEntidad="cliente"
+                          entidadId={c.id}
+                          nombre={c.nombre}
+                          onDelete={() => handleDelete(c.id)}
+                        />
+                      </div>
+                    </Td>
+                  </Tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </div>
       )}
 
       <ClienteFormModal

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Download, Sheet, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, Download, RefreshCcw, Sheet, Upload } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { Spinner } from "@/components/ui/Spinner";
 import { useUiStore } from "@/store/ui-store";
@@ -21,6 +21,11 @@ import type { ImportarResultado } from "@/types/api";
  * siempre visibles lado a lado, sin corresponder al mockup (un solo trigger con chevron
  * que abre un menú de 210px, borde negro, dos ítems). Valores (padding, radio, sombra)
  * tomados con getComputedStyle contra el HTML real.
+ *
+ * El modal de resultado (docs/35) se rediseñó en tarjetas de resumen (creados/actualizados,
+ * con sus propios colores e íconos) en vez de una sola línea de texto plano -- ahora que
+ * importar puede tanto crear como actualizar (upsert), una sola frase ya no alcanza para
+ * comunicar de un vistazo qué pasó.
  */
 export function ImportExportBar({
   entidad,
@@ -34,7 +39,7 @@ export function ImportExportBar({
   puedeImportar: boolean;
   onExport: () => Promise<{ blob: Blob; fileName: string }>;
   onImport: (archivo: File) => Promise<ImportarResultado>;
-  /** Se llama después de una importación con al menos una fila creada, para refrescar la lista. */
+  /** Se llama después de una importación con al menos una fila creada o actualizada, para refrescar la lista. */
   onImported: () => void;
 }) {
   const pushToast = useUiStore((s) => s.pushToast);
@@ -75,16 +80,21 @@ export function ImportExportBar({
     try {
       const resultado = await onImport(archivo);
       setResultado(resultado);
-      if (resultado.creados > 0) {
+      const tocados = resultado.creados + resultado.actualizados;
+      if (tocados > 0) {
         onImported();
+        const partes = [
+          resultado.creados > 0 ? `${resultado.creados} creados` : null,
+          resultado.actualizados > 0 ? `${resultado.actualizados} actualizados` : null,
+        ].filter(Boolean);
         pushToast(
           resultado.errores.length === 0
-            ? `${resultado.creados} ${entidad} importados`
-            : `${resultado.creados} ${entidad} importados, ${resultado.errores.length} fila(s) con error`,
+            ? `${entidad}: ${partes.join(", ")}`
+            : `${entidad}: ${partes.join(", ")}, ${resultado.errores.length} fila(s) con error`,
           resultado.errores.length === 0 ? "success" : "info",
         );
       } else {
-        pushToast(`No se creó ningún registro -- revisa los errores`, "danger");
+        pushToast(`No se creó ni actualizó ningún registro -- revisa los errores`, "danger");
       }
     } catch (err) {
       pushToast(err instanceof Error ? err.message : `No se pudo importar el archivo`, "danger");
@@ -94,6 +104,8 @@ export function ImportExportBar({
   }
 
   const busy = exporting || importing;
+  const totalErrores = resultado?.errores.length ?? 0;
+  const totalTocados = resultado ? resultado.creados + resultado.actualizados : 0;
 
   return (
     <>
@@ -133,7 +145,7 @@ export function ImportExportBar({
                 className="flex w-full cursor-pointer items-center gap-2.5 rounded-[3px] px-2.5 py-2.5 text-left text-[13px] text-text hover:bg-gray-light"
               >
                 <Upload size={15} strokeWidth={1.8} />
-                Importar desde CSV
+                Importar desde Excel
               </button>
             )}
             <button
@@ -155,17 +167,44 @@ export function ImportExportBar({
 
       <Modal open={resultado !== null} onClose={() => setResultado(null)} title="Resultado de la importación" maxWidth={640}>
         {resultado && (
-          <div className="flex flex-col gap-3 text-[13px]">
-            <div>
-              <span className="font-semibold text-teal-mid">{resultado.creados}</span> {entidad} creados correctamente.
-            </div>
-            {resultado.errores.length > 0 && (
+          <div className="flex flex-col gap-4">
+            {totalTocados > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-success-light px-4 py-3.5">
+                  <CheckCircle2 size={22} strokeWidth={1.8} className="shrink-0 text-success" />
+                  <div>
+                    <div className="font-mono text-xl font-semibold leading-none text-success">{resultado.creados}</div>
+                    <div className="mt-1 text-[12.5px] text-text-2">
+                      {entidad} {resultado.creados === 1 ? "nuevo" : "nuevos"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-blue-light px-4 py-3.5">
+                  <RefreshCcw size={22} strokeWidth={1.8} className="shrink-0 text-blue" />
+                  <div>
+                    <div className="font-mono text-xl font-semibold leading-none text-blue">{resultado.actualizados}</div>
+                    <div className="mt-1 text-[12.5px] text-text-2">
+                      {resultado.actualizados === 1 ? "ya existía, se actualizó" : "ya existían, se actualizaron"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : totalErrores === 0 ? (
+              <div className="rounded-[var(--radius-lg)] border border-border bg-gray-light px-4 py-3.5 text-[13px] text-text-2">
+                El archivo no tenía filas para importar.
+              </div>
+            ) : null}
+
+            {totalErrores > 0 && (
               <div>
-                <div className="mb-1.5 font-medium text-red">{resultado.errores.length} fila(s) no se pudieron crear:</div>
+                <div className="mb-2 flex items-center gap-1.5 font-medium text-red">
+                  <AlertTriangle size={15} strokeWidth={2} className="shrink-0" />
+                  {totalErrores} fila{totalErrores === 1 ? "" : "s"} no se {totalErrores === 1 ? "pudo" : "pudieron"} importar
+                </div>
                 <div className="max-h-72 overflow-y-auto rounded-[var(--radius-md)] border border-border">
                   {resultado.errores.map((e, i) => (
-                    <div key={i} className={`flex gap-2 px-3 py-2 ${i > 0 ? "border-t border-border" : ""}`}>
-                      <span className="shrink-0 font-mono text-text-3">Fila {e.fila}</span>
+                    <div key={i} className={`flex gap-2.5 px-3 py-2.5 text-[13px] ${i > 0 ? "border-t border-border" : ""}`}>
+                      <span className="shrink-0 rounded-[3px] bg-red-light px-1.5 py-0.5 font-mono text-[12px] text-red">Fila {e.fila}</span>
                       <span className="text-text-2">{e.mensaje}</span>
                     </div>
                   ))}

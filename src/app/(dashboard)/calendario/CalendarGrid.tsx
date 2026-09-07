@@ -1,10 +1,20 @@
 "use client";
 
 import { CheckCircle2, Clock, XCircle } from "lucide-react";
-import type { Proyecto } from "@/types/api";
 
 const WEEKDAY_NAMES = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const EJECUTADO_NOMBRES = ["Finalizado", "Ejecutado, pendiente facturar", "Facturado"];
+
+/** Lo mínimo que necesita una celda del calendario -- viene de cruzar `ProyectoCalendarioItem`
+ * (GET /api/calendario/{anio}/{mes}, ya trae `fechaEventoLocal` resuelta por sede, docs/18) con el
+ * `Proyecto` completo de la store (para `sinProveedor`). Ver calendario/page.tsx. */
+export interface CalendarEntry {
+  id: string;
+  nombre: string;
+  fechaEventoLocal: string;
+  estadoNombre: string;
+  sinProveedor: boolean;
+}
 
 interface DayCell {
   date: Date;
@@ -31,26 +41,25 @@ function buildMonthMatrix(year: number, monthIndex: number, todayIso: string): D
 export function CalendarGrid({
   year,
   monthIndex,
-  projects,
-  estadoNombrePorId,
+  entries,
   today,
   onOpen,
 }: {
   year: number;
   monthIndex: number;
-  projects: Proyecto[];
-  estadoNombrePorId: Record<string, string>;
+  entries: CalendarEntry[];
   today: string;
   onOpen: (id: string) => void;
 }) {
   const cells = buildMonthMatrix(year, monthIndex, today);
-  const byDay = new Map<string, Proyecto[]>();
-  projects.forEach((p) => {
-    const fecha = p.fechaEvento?.slice(0, 10);
-    if (!fecha) return;
-    const list = byDay.get(fecha) ?? [];
+  // Agrupado por `fechaEventoLocal` -- ya viene resuelta a la hora local de la sede del proyecto
+  // (docs/18), no se recalcula acá cortando un timestamp UTC.
+  const byDay = new Map<string, CalendarEntry[]>();
+  entries.forEach((p) => {
+    if (!p.fechaEventoLocal) return;
+    const list = byDay.get(p.fechaEventoLocal) ?? [];
     list.push(p);
-    byDay.set(fecha, list);
+    byDay.set(p.fechaEventoLocal, list);
   });
 
   return (
@@ -83,11 +92,9 @@ export function CalendarGrid({
               </span>
               <div className="flex flex-col gap-1">
                 {dayProjects.map((p) => {
-                  const estadoNombre = estadoNombrePorId[p.estadoId] ?? "";
-                  const fecha = p.fechaEvento?.slice(0, 10) ?? "";
-                  const ejecutado = EJECUTADO_NOMBRES.includes(estadoNombre) || (fecha < today && estadoNombre !== "Cancelado");
-                  const StatusIcon = estadoNombre === "Cancelado" ? XCircle : ejecutado ? CheckCircle2 : Clock;
-                  const statusColor = estadoNombre === "Cancelado" ? "var(--red)" : ejecutado ? "var(--teal-mid)" : "var(--text-3)";
+                  const ejecutado = EJECUTADO_NOMBRES.includes(p.estadoNombre) || (p.fechaEventoLocal < today && p.estadoNombre !== "Cancelado");
+                  const StatusIcon = p.estadoNombre === "Cancelado" ? XCircle : ejecutado ? CheckCircle2 : Clock;
+                  const statusColor = p.estadoNombre === "Cancelado" ? "var(--red)" : ejecutado ? "var(--teal-mid)" : "var(--text-3)";
                   return (
                     <button
                       key={p.id}
@@ -99,7 +106,7 @@ export function CalendarGrid({
                       <span className="min-w-0 flex-1 truncate text-[11px] font-medium leading-tight">
                         {p.nombre || "(Sin nombre)"}
                       </span>
-                      {p.proveedorIds.length === 0 && (
+                      {p.sinProveedor && (
                         <span
                           aria-label="Sin proveedor asignado"
                           className="h-1.5 w-1.5 flex-shrink-0 rounded-full"

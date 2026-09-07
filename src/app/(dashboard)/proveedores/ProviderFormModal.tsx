@@ -13,7 +13,7 @@ import { parseCSVFirstRow } from "@/lib/csv";
 import { proveedorAdjuntosApi } from "@/services/api/proveedor-adjuntos-service";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useUiStore } from "@/store/ui-store";
-import type { Proveedor, ProveedorInput, ProveedorTelefono } from "@/types/api";
+import type { Proveedor, ProveedorEmail, ProveedorInput, ProveedorTelefono } from "@/types/api";
 
 interface FormState {
   nombre: string;
@@ -24,7 +24,6 @@ interface FormState {
   estado: string;
   contacto: string;
   cargoContacto: string;
-  email: string;
   web: string;
   direccion: string;
   aforo: string;
@@ -34,6 +33,7 @@ interface FormState {
   cobertura: string;
   notas: string;
   telefonos: ProveedorTelefono[];
+  emails: ProveedorEmail[];
   servicioIds: string[];
 }
 
@@ -46,7 +46,6 @@ const emptyForm: FormState = {
   estado: PROVEEDOR_ESTADOS[0],
   contacto: "",
   cargoContacto: "",
-  email: "",
   web: "",
   direccion: "",
   aforo: "",
@@ -56,6 +55,7 @@ const emptyForm: FormState = {
   cobertura: "",
   notas: "",
   telefonos: [],
+  emails: [],
   servicioIds: [],
 };
 
@@ -92,6 +92,7 @@ export function ProviderFormModal({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [telDraft, setTelDraft] = useState("");
+  const [emailDraft, setEmailDraft] = useState("");
 
   useEffect(() => {
     if (open) fetchBase();
@@ -110,7 +111,6 @@ export function ProviderFormModal({
         estado: editing.estado,
         contacto: editing.contacto ?? "",
         cargoContacto: editing.cargoContacto ?? "",
-        email: editing.email ?? "",
         web: editing.web ?? "",
         direccion: editing.direccion ?? "",
         aforo: editing.aforo != null ? String(editing.aforo) : "",
@@ -120,6 +120,7 @@ export function ProviderFormModal({
         cobertura: editing.cobertura ?? "",
         notas: editing.notas ?? "",
         telefonos: editing.telefonos,
+        emails: editing.emails,
         servicioIds: editing.servicioIds,
       });
       if (editing.paisId) fetchRegiones(editing.paisId);
@@ -129,6 +130,7 @@ export function ProviderFormModal({
     }
     setErrors({});
     setTelDraft("");
+    setEmailDraft("");
   }, [open, editing, fetchRegiones, fetchCiudades]);
 
   const regionOptions = useMemo(() => regionesPorPais[form.paisId] ?? [], [regionesPorPais, form.paisId]);
@@ -169,6 +171,20 @@ export function ProviderFormModal({
     );
   }
 
+  function addEmail() {
+    const value = emailDraft.trim();
+    if (!value) return;
+    set("emails", [...form.emails, { email: value, etiqueta: "" }]);
+    setEmailDraft("");
+  }
+
+  function removeEmail(idx: number) {
+    set(
+      "emails",
+      form.emails.filter((_, i) => i !== idx),
+    );
+  }
+
   /**
    * "Importar datos" (header del drawer) -- rellena el formulario abierto desde la
    * primera fila de un CSV, igual que en ClienteFormModal/ProjectFormModal. País/
@@ -196,7 +212,6 @@ export function ProviderFormModal({
         estado: pick("estado") ?? f.estado,
         contacto: pick("contacto", "persona", "personadecontacto") ?? f.contacto,
         cargoContacto: pick("cargo", "cargocontacto") ?? f.cargoContacto,
-        email: pick("email", "correo") ?? f.email,
         web: pick("web", "sitioweb", "sitio web") ?? f.web,
         direccion: pick("direccion", "dirección") ?? f.direccion,
         aforo: pick("aforo") ?? f.aforo,
@@ -207,6 +222,9 @@ export function ProviderFormModal({
       }));
       const tel = pick("telefono", "teléfono", "telefonos", "teléfonos");
       if (tel) setTelDraft(tel);
+      // Igual que el teléfono, solo se rellena el campo de "agregar" -- ver ClienteFormModal.
+      const correo = pick("email", "correo");
+      if (correo) setEmailDraft(correo);
       pushToast("Datos importados. Revisa los campos y guarda.", "info");
     };
     reader.readAsText(file);
@@ -229,7 +247,6 @@ export function ProviderFormModal({
       estado: form.estado,
       contacto: form.contacto.trim() || null,
       cargoContacto: form.cargoContacto.trim() || null,
-      email: form.email.trim() || null,
       web: form.web.trim() || null,
       direccion: form.direccion.trim() || null,
       aforo: form.aforo.trim() ? Number(form.aforo) : null,
@@ -239,6 +256,7 @@ export function ProviderFormModal({
       cobertura: form.cobertura.trim() || null,
       notas: form.notas.trim() || null,
       telefonos: form.telefonos.filter((t) => t.telefono.trim()),
+      emails: form.emails.filter((e) => e.email.trim()),
       servicioIds: form.servicioIds,
     };
     onSave(input);
@@ -409,13 +427,52 @@ export function ProviderFormModal({
             </div>
           </Field>
 
-          <Field label="Correo">
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => set("email", e.target.value)}
-              placeholder="nombre@empresa.com"
-            />
+          <Field label="Correos">
+            <div className="flex flex-col gap-2">
+              {form.emails.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {form.emails.map((e, idx) => (
+                    <span
+                      key={e.id ?? idx}
+                      className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
+                    >
+                      {e.email}
+                      {e.etiqueta ? ` · ${e.etiqueta}` : ""}
+                      <button
+                        type="button"
+                        onClick={() => removeEmail(idx)}
+                        aria-label="Quitar correo"
+                        className="flex h-[18px] w-[18px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-text-2 hover:bg-black/10 hover:text-red"
+                      >
+                        <X size={11} strokeWidth={2.4} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  value={emailDraft}
+                  onChange={(e) => setEmailDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addEmail();
+                    }
+                  }}
+                  placeholder="nombre@empresa.com"
+                  className="flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={addEmail}
+                  className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+                >
+                  Agregar
+                </button>
+              </div>
+            </div>
           </Field>
         </FormDrawerSection>
 

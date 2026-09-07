@@ -4,14 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { ActiveFilters, Button, type FilterChip } from "@/components/ui/primitives";
 import { Select } from "@/components/ui/form";
+import { calendarioApi } from "@/services/api/calendario-service";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useProjectsStore } from "@/store/projects-store";
 import { useProvidersStore } from "@/store/providers-store";
 import { useUiStore } from "@/store/ui-store";
-import type { Proyecto, ProyectoInput } from "@/types/api";
+import type { Proyecto, ProyectoCalendarioItem, ProyectoInput } from "@/types/api";
 import { ProjectDetail } from "../proyectos/ProjectDetail";
 import { ProjectFormModal } from "../proyectos/ProjectFormModal";
-import { CalendarGrid } from "./CalendarGrid";
+import { CalendarGrid, type CalendarEntry } from "./CalendarGrid";
 import styles from "@/styles/dashboard.module.css";
 
 const MONTH_NAMES = [
@@ -51,6 +52,8 @@ export default function CalendarioPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Proyecto | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [monthItems, setMonthItems] = useState<ProyectoCalendarioItem[]>([]);
+  const [monthError, setMonthError] = useState<string | null>(null);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -58,6 +61,26 @@ export default function CalendarioPage() {
     () => Object.fromEntries(estadosProyecto.map((e) => [e.id, e.nombre])),
     [estadosProyecto],
   );
+
+  // Fuente de verdad de "qué proyectos van en este mes y en qué día" -- GET /api/calendario/{anio}/{mes}
+  // (docs/07, docs/18): el backend decide el mes/día según la hora LOCAL de la sede de cada proyecto
+  // (`fechaEventoLocal`), no según UTC. Antes esto se recalculaba acá cortando `fechaEvento` (UTC) del
+  // store de proyectos, lo que corría un proyecto de sede al día/mes siguiente cerca de medianoche.
+  useEffect(() => {
+    let cancelled = false;
+    setMonthError(null);
+    calendarioApi
+      .proyectosDelMes(year, monthIndex + 1)
+      .then((items) => {
+        if (!cancelled) setMonthItems(items);
+      })
+      .catch((err) => {
+        if (!cancelled) setMonthError(err instanceof Error ? err.message : "No se pudo cargar el calendario de este mes");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [year, monthIndex]);
 
   function goToMonth(delta: number) {
     const d = new Date(year, monthIndex + delta, 1);
@@ -70,18 +93,32 @@ export default function CalendarioPage() {
     setMonthIndex(now.getMonth());
   }
 
-  const monthProjects = useMemo(() => {
-    const mm = String(monthIndex + 1).padStart(2, "0");
-    const prefix = `${year}-${mm}`;
-    return projects.filter(
-      (p) =>
-        p.fechaEvento?.slice(0, 10).startsWith(prefix) &&
-        (!filtEstadoId || p.estadoId === filtEstadoId) &&
-        (!filtBrief || p.estadoBrief === filtBrief),
-    );
-  }, [projects, year, monthIndex, filtEstadoId, filtBrief]);
+  // Cruce entre lo que trajo el calendario para este mes (`monthItems`, ya bucketed por día local
+  // de sede) y el `Proyecto` completo del store -- ahí viven `estadoId`/`estadoBrief` (para filtrar
+  // igual que antes) y `proveedorIds` (para el badge "sin proveedor"), que la proyección liviana del
+  // calendario no trae a propósito (docs/07). Si un proyecto todavía no está en el store (carrera con
+  // `fetchAll`), se muestra igual sin poder aplicarle los filtros de estado/brief.
+  const monthProjects: CalendarEntry[] = useMemo(() => {
+    const porId = new Map(projects.map((p) => [p.id, p]));
+    return monthItems
+      .filter((item) => {
+        const full = porId.get(item.id);
+        if (!full) return true;
+        return (!filtEstadoId || full.estadoId === filtEstadoId) && (!filtBrief || full.estadoBrief === filtBrief);
+      })
+      .map((item) => {
+        const full = porId.get(item.id);
+        return {
+          id: item.id,
+          nombre: item.nombre,
+          fechaEventoLocal: item.fechaEventoLocal,
+          estadoNombre: item.estadoNombre,
+          sinProveedor: (full?.proveedorIds.length ?? 0) === 0,
+        };
+      });
+  }, [monthItems, projects, filtEstadoId, filtBrief]);
 
-  const sinProveedor = monthProjects.filter((p) => p.proveedorIds.length === 0).length;
+  const sinProveedor = monthProjects.filter((p) => p.sinProveedor).length;
 
   const chips: FilterChip[] = [
     filtEstadoId && { key: "estado", label: estadoNombrePorId[filtEstadoId] ?? "" },
@@ -190,24 +227,27 @@ export default function CalendarioPage() {
         }}
       />
 
-      {projectsError && (
+      {(projectsError || monthError) && (
         <div className="mb-4 flex items-center justify-between gap-3 rounded-(--radius-md) bg-red-light px-3.5 py-2.5 text-[13px] text-red">
-          <span>{projectsError}</span>
-          <Button size="sm" onClick={fetchAll}>
+          <span>{projectsError || monthError}</span>
+          <Button
+            size="sm"
+            onClick={() => {
+              fetchAll();
+              calendarioApi
+                .proyectosDelMes(year, monthIndex + 1)
+                .then(setMonthItems)
+                .then(() => setMonthError(null))
+                .catch((err) => setMonthError(err instanceof Error ? err.message : "No se pudo cargar el calendario de este mes"));
+            }}
+          >
             Reintentar
           </Button>
         </div>
       )}
 
       <div className="mt-1">
-        <CalendarGrid
-          year={year}
-          monthIndex={monthIndex}
-          projects={monthProjects}
-          estadoNombrePorId={estadoNombrePorId}
-          today={today}
-          onOpen={setDetailId}
-        />
+        <CalendarGrid year={year} monthIndex={monthIndex} entries={monthProjects} today={today} onOpen={setDetailId} />
       </div>
 
       <ProjectDetail

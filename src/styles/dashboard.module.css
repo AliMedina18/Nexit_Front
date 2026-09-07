@@ -101,11 +101,19 @@
   }
 }
 
-/* Rejilla de tarjetas de las listas -- columnas de mínimo 320px que se
-   acomodan solas, igual que `repeat(auto-fill,minmax(320px,1fr))` del
-   mockup, en vez de un número fijo de columnas por breakpoint. */
+/* Rejilla de tarjetas de las listas -- columnas que se acomodan solas, con un
+   ANCHO MÁXIMO por tarjeta (no solo mínimo). Antes era
+   `repeat(auto-fill,minmax(320px,1fr))` (igual que el mockup): el `1fr` deja
+   que cada columna crezca sin tope, así que en pantallas anchas con pocas
+   tarjetas por fila (p. ej. 4 en 1920px) cada una terminaba mucho más ancha
+   de lo que su contenido necesita -- se veía desproporcionada, con mucho
+   espacio muerto adentro. Con un tope (380px) las tarjetas se quedan en un
+   tamaño razonable y sencillamente se agregan más columnas si el ancho
+   sobra, en vez de estirar las que ya hay. `auto-fill` (no `auto-fit`) sigue
+   siendo a propósito -- ver el comentario de más abajo sobre por qué la
+   fila de paginación no debe usar la misma lógica de `1fr`. */
 .cardsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 380px));
   gap: 12px;
 }

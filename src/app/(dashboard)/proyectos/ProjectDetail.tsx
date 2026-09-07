@@ -23,7 +23,10 @@ import { useClientesStore } from "@/store/clientes-store";
 import { useUiStore } from "@/store/ui-store";
 import type { Proveedor, Proyecto, SeguimientoProyecto } from "@/types/api";
 
-const AREAS_SEGUIMIENTO = ["General", "Comercial", "Producción", "Diseño", "Logística", "Facturación"];
+// Debe calzar EXACTO con `Areas` en Nexit_Back/.../Validators/Proyectos/ProyectoValidators.cs
+// (CrearSeguimientoProyectoValidator) -- si no coincide, agregar la entrada a la bitácora
+// falla en el backend con "El área de seguimiento no es válida.".
+const AREAS_SEGUIMIENTO = ["General", "Creativo", "Comercial", "Administrativo"];
 
 /**
  * Sin botón de eliminar: aquí solo se mira y se puede editar. Eliminar (o
@@ -57,7 +60,8 @@ export function ProjectDetail({
   const assigned = project.proveedorIds.map((id) => providers.find((p) => p.id === id)).filter((p): p is Proveedor => Boolean(p));
   const primerTelefono = cliente?.telefonos[0]?.telefono;
   const whatsappHref = primerTelefono ? `https://wa.me/${primerTelefono.replace(/[^\d]/g, "")}` : null;
-  const correoHref = cliente?.email ? `mailto:${cliente.email}` : null;
+  const primerEmail = cliente?.emails[0]?.email;
+  const correoHref = primerEmail ? `mailto:${primerEmail}` : null;
   const fechaEventoLabel = fmtDateLong(project.fechaEvento?.slice(0, 10)) || "Sin fecha";
   const fechaSolicitudLabel = fmtDateLong(project.fechaSolicitud?.slice(0, 10)) || "Sin fecha";
   const facturaLabel = project.pagado

@@ -12,7 +12,7 @@ import { parseCSVFirstRow } from "@/lib/csv";
 import { clienteAdjuntosApi } from "@/services/api/cliente-adjuntos-service";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useUiStore } from "@/store/ui-store";
-import type { Cliente, ClienteInput, ClienteTelefono } from "@/types/api";
+import type { Cliente, ClienteEmail, ClienteInput, ClienteTelefono } from "@/types/api";
 
 interface FormState {
   nombre: string;
@@ -21,15 +21,16 @@ interface FormState {
   regionId: string;
   ciudadId: string;
   estado: string;
+  etapaId: string;
   ciudad: string;
   direccion: string;
   web: string;
   contacto: string;
   cargoContacto: string;
-  email: string;
   valorReferencia: string;
   notas: string;
   telefonos: ClienteTelefono[];
+  emails: ClienteEmail[];
 }
 
 const emptyForm: FormState = {
@@ -39,15 +40,16 @@ const emptyForm: FormState = {
   regionId: "",
   ciudadId: "",
   estado: CLIENTE_ESTADOS[0],
+  etapaId: "",
   ciudad: "",
   direccion: "",
   web: "",
   contacto: "",
   cargoContacto: "",
-  email: "",
   valorReferencia: "",
   notas: "",
   telefonos: [],
+  emails: [],
 };
 
 const ESTADO_OPTIONS = CLIENTE_ESTADOS.map((e) => ({ value: e, label: e }));
@@ -67,11 +69,16 @@ export function ClienteFormModal({
   onDelete?: () => void;
   editing: Cliente | null;
 }) {
-  const { paises, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } = useCatalogosStore();
+  const { paises, etapasCliente, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } = useCatalogosStore();
+  const etapaOptions = useMemo(
+    () => [...etapasCliente].sort((a, b) => a.orden - b.orden).map((e) => ({ value: e.id, label: `${e.nombre} (${e.porcentajeProceso}%)` })),
+    [etapasCliente],
+  );
   const pushToast = useUiStore((s) => s.pushToast);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [telDraft, setTelDraft] = useState("");
+  const [emailDraft, setEmailDraft] = useState("");
 
   useEffect(() => {
     if (open) fetchBase();
@@ -88,15 +95,16 @@ export function ClienteFormModal({
         regionId: editing.regionId ?? "",
         ciudadId: editing.ciudadId ?? "",
         estado: editing.estado,
+        etapaId: editing.etapaId ?? "",
         ciudad: editing.ciudad ?? "",
         direccion: editing.direccion ?? "",
         web: editing.web ?? "",
         contacto: editing.contacto ?? "",
         cargoContacto: editing.cargoContacto ?? "",
-        email: editing.email ?? "",
         valorReferencia: editing.valorReferencia ?? "",
         notas: editing.notas ?? "",
         telefonos: editing.telefonos.length > 0 ? editing.telefonos : [],
+        emails: editing.emails.length > 0 ? editing.emails : [],
       });
       if (editing.paisId) fetchRegiones(editing.paisId);
       if (editing.regionId) fetchCiudades(editing.regionId);
@@ -105,6 +113,7 @@ export function ClienteFormModal({
     }
     setErrors({});
     setTelDraft("");
+    setEmailDraft("");
   }, [open, editing, fetchRegiones, fetchCiudades]);
 
   const regionOptions = useMemo(() => regionesPorPais[form.paisId] ?? [], [regionesPorPais, form.paisId]);
@@ -141,6 +150,20 @@ export function ClienteFormModal({
     );
   }
 
+  function addEmail() {
+    const value = emailDraft.trim();
+    if (!value) return;
+    set("emails", [...form.emails, { email: value, etiqueta: "" }]);
+    setEmailDraft("");
+  }
+
+  function removeEmail(idx: number) {
+    set(
+      "emails",
+      form.emails.filter((_, i) => i !== idx),
+    );
+  }
+
   /**
    * "Importar datos" (header del drawer) -- rellena el formulario abierto desde la
    * primera fila de un CSV. A diferencia del "Excel" de la barra superior (que crea
@@ -171,7 +194,6 @@ export function ClienteFormModal({
         estado: pick("estado") ?? f.estado,
         contacto: pick("contacto", "persona", "personadecontacto") ?? f.contacto,
         cargoContacto: pick("cargo", "cargocontacto") ?? f.cargoContacto,
-        email: pick("email", "correo") ?? f.email,
         direccion: pick("direccion", "dirección") ?? f.direccion,
         web: pick("web", "sitioweb", "sitio web") ?? f.web,
         valorReferencia: pick("valorreferencia", "valor de referencia", "valor") ?? f.valorReferencia,
@@ -179,6 +201,10 @@ export function ClienteFormModal({
       }));
       const tel = pick("telefono", "teléfono", "telefonos", "teléfonos");
       if (tel) setTelDraft(tel);
+      // Al igual que el teléfono, solo se rellena el campo de "agregar" -- no se agrega solo a la
+      // lista -- así la persona revisa antes de confirmar.
+      const correo = pick("email", "correo");
+      if (correo) setEmailDraft(correo);
       pushToast("Datos importados. Revisa los campos y guarda.", "info");
     };
     reader.readAsText(file);
@@ -204,15 +230,16 @@ export function ClienteFormModal({
       // es" arriba), pero esto asegura que un cliente nuevo nunca se guarde en otro estado
       // aunque `form.estado` se hubiera quedado con un valor de una edición anterior.
       estado: editing ? form.estado : CLIENTE_ESTADOS[0],
+      etapaId: form.etapaId || null,
       ciudad: ciudadCatalogoNombre ?? (form.ciudad.trim() || null),
       direccion: form.direccion.trim() || null,
       web: form.web.trim() || null,
       contacto: form.contacto.trim() || null,
       cargoContacto: form.cargoContacto.trim() || null,
-      email: form.email.trim() || null,
       valorReferencia: form.valorReferencia.trim() || null,
       notas: form.notas.trim() || null,
       telefonos: form.telefonos.filter((t) => t.telefono.trim()),
+      emails: form.emails.filter((e) => e.email.trim()),
     };
     onSave(input);
   }
@@ -267,13 +294,23 @@ export function ClienteFormModal({
               />
             </Field>
           )}
-          <Field label="Industria">
-            <Input
-              value={form.sector}
-              onChange={(e) => set("sector", e.target.value)}
-              placeholder="Consumo masivo, tecnología, finanzas…"
-            />
-          </Field>
+          <Row cols={2}>
+            <Field label="Industria">
+              <Input
+                value={form.sector}
+                onChange={(e) => set("sector", e.target.value)}
+                placeholder="Consumo masivo, tecnología, finanzas…"
+              />
+            </Field>
+            <Field label="Etapa del proceso comercial" hint={<div className="mt-1.5 text-xs text-text-3">Dónde va la relación con este cliente (E1-E6). No aplica una vez que ya hay un proyecto en curso.</div>}>
+              <Dropdown
+                value={form.etapaId}
+                onChange={(v) => set("etapaId", v)}
+                placeholder="Sin asignar"
+                options={etapaOptions}
+              />
+            </Field>
+          </Row>
         </FormDrawerSection>
 
         <FormDrawerSection number="02" title="Dónde está">
@@ -378,13 +415,52 @@ export function ClienteFormModal({
             </div>
           </Field>
 
-          <Field label="Correo">
-            <Input
-              type="email"
-              value={form.email}
-              onChange={(e) => set("email", e.target.value)}
-              placeholder="contacto@empresa.com"
-            />
+          <Field label="Correos">
+            <div className="flex flex-col gap-2">
+              {form.emails.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {form.emails.map((e, idx) => (
+                    <span
+                      key={e.id ?? idx}
+                      className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
+                    >
+                      {e.email}
+                      {e.etiqueta ? ` · ${e.etiqueta}` : ""}
+                      <button
+                        type="button"
+                        onClick={() => removeEmail(idx)}
+                        aria-label="Quitar correo"
+                        className="flex h-[18px] w-[18px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-text-2 hover:bg-black/10 hover:text-red"
+                      >
+                        <X size={11} strokeWidth={2.4} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  value={emailDraft}
+                  onChange={(e) => setEmailDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addEmail();
+                    }
+                  }}
+                  placeholder="contacto@empresa.com"
+                  className="flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={addEmail}
+                  className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+                >
+                  Agregar
+                </button>
+              </div>
+            </div>
           </Field>
         </FormDrawerSection>
 

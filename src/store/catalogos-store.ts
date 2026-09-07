@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { catalogosApi } from "@/services/api/catalogos-service";
-import type { Ciudad, EstadoProyecto, FaseProyecto, ItemCatalogo, Pais, Region } from "@/types/api";
+import type { Ciudad, EstadoProyecto, EtapaCliente, FaseProyecto, ItemCatalogo, Pais, Region } from "@/types/api";
 
 /**
  * Catálogos compartidos (países, categorías de proveedor, servicios) --
@@ -18,6 +18,7 @@ interface CatalogosState {
   servicios: ItemCatalogo[];
   estadosProyecto: EstadoProyecto[];
   fasesProyecto: FaseProyecto[];
+  etapasCliente: EtapaCliente[];
   regionesPorPais: Record<string, Region[]>;
   ciudadesPorRegion: Record<string, Ciudad[]>;
   loaded: boolean;
@@ -35,6 +36,7 @@ export const useCatalogosStore = create<CatalogosState>((set, get) => ({
   servicios: [],
   estadosProyecto: [],
   fasesProyecto: [],
+  etapasCliente: [],
   regionesPorPais: {},
   ciudadesPorRegion: {},
   loaded: false,
@@ -44,14 +46,15 @@ export const useCatalogosStore = create<CatalogosState>((set, get) => ({
     if (get().loaded || get().loading) return;
     set({ loading: true, error: null });
     try {
-      const [paises, categoriasProveedor, servicios, estadosProyecto, fasesProyecto] = await Promise.all([
+      const [paises, categoriasProveedor, servicios, estadosProyecto, fasesProyecto, etapasCliente] = await Promise.all([
         catalogosApi.paises.list(),
         catalogosApi.categoriasProveedor.list(),
         catalogosApi.servicios.list(),
         catalogosApi.estadosProyecto.list(),
         catalogosApi.fasesProyecto.list(),
+        catalogosApi.etapasCliente.list(),
       ]);
-      set({ paises, categoriasProveedor, servicios, estadosProyecto, fasesProyecto, loading: false, loaded: true });
+      set({ paises, categoriasProveedor, servicios, estadosProyecto, fasesProyecto, etapasCliente, loading: false, loaded: true });
     } catch (err) {
       set({ loading: false, error: err instanceof Error ? err.message : "No se pudieron cargar los catálogos." });
     }

@@ -18,7 +18,11 @@ import type { Proveedor, Proyecto, ProyectoEquipoMiembro, ProyectoInput, Usuario
 import { ProviderPicker } from "./ProviderPicker";
 
 const BRIEF_ESTADOS = ["Pendiente por enviar", "Entregado, a espera de respuesta", "Requiere ajustes", "Aprobado"];
-const PROPUESTA_ESTADOS = ["Pendiente", "Enviada", "Aprobada", "Rechazada"];
+// Debe calzar EXACTO con `Propuestas` en Nexit_Back/.../Validators/Proyectos/ProyectoValidators.cs
+// -- si no coincide, guardar el proyecto falla en el backend con "El estado de la propuesta no es válido.".
+const PROPUESTA_ESTADOS = ["No enviada", "En proceso", "Enviada"];
+// Debe calzar EXACTO con `Roles` en el mismo validator (usado por el picker de rol del equipo, abajo).
+const ROLES_EQUIPO = ["Ejecutivo", "Comercial", "Administrativo", "Diseñador 3D", "Diseñador gráfico"];
 // Listas base del mockup aprobado -- el valor ya guardado en un proyecto viejo (si no está
 // en esta lista) se agrega igual como opción extra, para no perderlo por venir de antes de
 // que este campo se volviera un dropdown cerrado.
@@ -241,6 +245,7 @@ export function ProjectFormModal({
     const nextErrors: Record<string, string> = {};
     if (!form.nombre.trim()) nextErrors.nombre = "El nombre del proyecto es requerido";
     if (!form.estadoId) nextErrors.estadoId = "Selecciona el estado";
+    if (form.pagado && !form.fechaPago) nextErrors.fechaPago = "La fecha de pago es requerida cuando el proyecto está pagado";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
 
@@ -262,7 +267,12 @@ export function ProjectFormModal({
       pagado: form.pagado,
       fechaPago: form.fechaPago || null,
       notas: form.notas.trim() || null,
-      gerenteId: puedeAsignarGerente ? form.gerenteId || null : undefined,
+      // Si quien edita no puede reasignar gerente, se reenvía el mismo GerenteId que ya
+      // tenía el proyecto (nunca `undefined`/null "porque sí") -- el backend compara este
+      // valor contra el guardado y rechaza con 403 cualquier cambio real hecho por alguien
+      // sin permiso; si mandáramos `undefined` (se cae del JSON) el backend lo lee como
+      // `null`, y eso SE considera un cambio en cuanto el proyecto ya tenía gerente asignado.
+      gerenteId: puedeAsignarGerente ? form.gerenteId || null : (editing?.gerenteId ?? null),
       equipo: form.equipo.filter((m) => m.nombre.trim()),
       proveedorIds: [...selectedIds],
     };
@@ -373,7 +383,7 @@ export function ProjectFormModal({
                 value={form.propuestaEstado}
                 onChange={(v) => set("propuestaEstado", v || PROPUESTA_ESTADOS[0])}
                 placeholder="Elige un estado"
-                options={PROPUESTA_ESTADOS.map((p) => ({ value: p, label: p }))}
+                options={withCurrent(PROPUESTA_ESTADOS, form.propuestaEstado).map((p) => ({ value: p, label: p }))}
               />
             </Field>
             <Field label={`Avance (${form.porcentajeAvance}%)`}>
@@ -403,7 +413,7 @@ export function ProjectFormModal({
               Pagado
             </label>
           </div>
-          <Field label="Fecha de pago">
+          <Field label="Fecha de pago" error={errors.fechaPago}>
             <Input type="date" value={form.fechaPago} onChange={(e) => set("fechaPago", e.target.value)} />
           </Field>
         </FormDrawerSection>
@@ -433,12 +443,14 @@ export function ProjectFormModal({
                 </div>
               )}
               <div className="flex gap-2">
-                <Input
-                  value={miembroRolDraft}
-                  onChange={(e) => setMiembroRolDraft(e.target.value)}
-                  placeholder="Rol (ej. Ejecutivo)"
-                  className="w-[160px]"
-                />
+                <div className="w-[160px] flex-shrink-0">
+                  <Dropdown
+                    value={miembroRolDraft}
+                    onChange={(v) => setMiembroRolDraft(v)}
+                    placeholder="Rol"
+                    options={ROLES_EQUIPO.map((r) => ({ value: r, label: r }))}
+                  />
+                </div>
                 <Input
                   value={miembroNombreDraft}
                   onChange={(e) => setMiembroNombreDraft(e.target.value)}
