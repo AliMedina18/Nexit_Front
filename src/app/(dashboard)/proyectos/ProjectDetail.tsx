@@ -14,10 +14,10 @@ import {
   DrawerIconButton,
 } from "@/components/ui/Drawer";
 import { EntityAttachments } from "@/components/ui/EntityAttachments";
+import { HistorialTimeline } from "@/components/ui/HistorialTimeline";
 import { Textarea } from "@/components/ui/form";
 import { BRIEF_STATUS_COLORS, PROJECT_STATUS_COLORS, PROVIDER_STATUS_COLORS, statusColor } from "@/lib/constants";
 import { fmtDateLong } from "@/lib/format";
-import { descripcionHistorial, fmtFechaHora } from "@/lib/historial";
 import { historialApi } from "@/services/api/historial-service";
 import { proyectoAdjuntosApi } from "@/services/api/proyecto-adjuntos-service";
 import { proyectosApi } from "@/services/api/proyectos-service";
@@ -185,8 +185,8 @@ export function ProjectDetail({
         </DetailBox>
 
         <DetailBox title="Equipo">
-          <DetailRow k="Gerente responsable" v={gerenteNombre || "—"} />
-          <DetailRow k="Contacto cliente" v={project.contactoProyecto || "—"} />
+          <DetailRow k="Líder de equipo" v={gerenteNombre || "—"} />
+          <DetailRow k="Persona de contacto" v={project.contactoProyecto || "—"} />
           {project.equipo.length === 0 ? (
             <DetailRow k="Miembros" v="—" />
           ) : (
@@ -235,22 +235,7 @@ export function ProjectDetail({
         </DetailBox>
 
         <DetailBox title="Historial de cambios" tone="plain">
-          {historialCargando ? (
-            <div className="py-1 text-sm text-text-3">Cargando…</div>
-          ) : historial.length === 0 ? (
-            <div className="py-1 text-sm text-text-3">Todavía no hay cambios registrados.</div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {historial.map((h) => (
-                <div key={h.id} className="border-l-2 border-border pl-3 text-[13px]">
-                  <div>
-                    <b className="font-semibold">{h.usuarioNombre || "Alguien"}</b> {descripcionHistorial(h)}
-                  </div>
-                  <div className="font-mono text-[11px] text-text-3">{fmtFechaHora(h.fecha)}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <HistorialTimeline cargando={historialCargando} historial={historial} />
         </DetailBox>
       </div>
 

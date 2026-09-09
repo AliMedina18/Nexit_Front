@@ -32,7 +32,7 @@ solo lugar, con un solo criterio de nombre.
   y `src/components/ui/MobileNav.tsx`.
 - **`dashboard.module.css`** -- título de página, fila de KPIs y filas de
   filtros: patrones que se repiten en Clientes/Proyectos/Proveedores/
-  Calendario/Informe/Usuarios, para no duplicar la misma regla 6 veces.
+  Informe/Usuarios, para no duplicar la misma regla 5 veces.
 - **`login.module.css`** -- estilos específicos del login (panel oscuro
   con sus dos media queries reales del diseño aprobado). Usado solo por
   `src/app/login/page.tsx`.

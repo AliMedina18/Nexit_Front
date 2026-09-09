@@ -29,6 +29,7 @@ function ConfirmDeleteDialog({
   onClose: () => void;
   onConfirm: (motivo: string) => void;
   nombre: string;
+  /** Nombre engañoso por compatibilidad -- en realidad es "puede eliminar directo" (admin/super_admin/director). */
   esAdmin: boolean;
   loading: boolean;
 }) {
@@ -116,12 +117,13 @@ function ConfirmDeleteDialog({
 }
 
 /**
- * Botón de eliminar de cliente/proveedor/proyecto -- construido 2026-08-28.
- * Un admin/super_admin sí puede eliminar directo (el backend igual lo exige,
- * ver *-service.ts de cada módulo). Cualquier otro rol nunca podía borrar
- * de verdad -- antes el botón "Eliminar" quedaba visible para todos y
- * simplemente fallaba con un 403 al hacer clic. Ahora, para ellos, el mismo
- * lugar dispara una solicitud real (SolicitudesEliminacionController, docs/23)
+ * Botón de eliminar de cliente/proveedor/proyecto -- construido 2026-08-28, ampliado 2026-09-09.
+ * Admin/super_admin/director (manager) sí pueden eliminar directo (el backend igual lo exige --
+ * política DirectorOrAbove, ver *-service.ts de cada módulo). Cuando quien elimina es un director,
+ * el administrador recibe una notificación (ver EliminarClienteUseCase/EliminarProveedorUseCase/
+ * EliminarProyectoUseCase en el backend). Miembro nunca puede borrar de verdad -- antes el botón
+ * "Eliminar" quedaba visible para todos y simplemente fallaba con un 403 al hacer clic. Para
+ * miembro, el mismo lugar dispara una solicitud real (SolicitudesEliminacionController, docs/23)
  * que un gerente (si aplica) y luego un admin revisan.
  *
  * `compact` cambia el trigger de un botón con texto a un ícono cuadrado de
@@ -147,7 +149,7 @@ export function DeleteOrRequestButton({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [yaSolicitado, setYaSolicitado] = useState(false);
-  const esAdmin = user?.rol === "admin" || user?.rol === "super_admin";
+  const esAdmin = user?.rol === "admin" || user?.rol === "super_admin" || user?.rol === "manager";
 
   async function handleConfirm(motivo: string) {
     if (esAdmin) {

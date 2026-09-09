@@ -454,24 +454,11 @@ export default function LoginPage() {
                 )}
               </Button>
               <a
-                className="mt-3.5 block cursor-pointer text-center text-xs text-text-3 hover:underline"
+                className="mt-3.5 block cursor-pointer text-center text-xs text-teal-mid hover:underline"
                 onClick={() => {
                   setError(null);
                   setPassword("");
                   setStep("email");
-                }}
-              >
-                Volver
-              </a>
-              {/* Enlace de respaldo en la otra dirección (docs/30): por si la
-                  autodetección se equivocó y esta persona en realidad no
-                  tiene contraseña configurada todavía. */}
-              <a
-                className="mt-1.5 block cursor-pointer text-center text-xs text-teal-mid hover:underline"
-                onClick={() => {
-                  setError(null);
-                  setPassword("");
-                  manejarContinuarConCorreo();
                 }}
               >
                 ¿Prefieres iniciar con código?

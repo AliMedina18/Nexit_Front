@@ -1,5 +1,5 @@
 import { apiClient } from "@/lib/api-client";
-import type { Usuario, UsuarioCreateInput, UsuarioRegistrarInput, UsuarioUpdateInput } from "@/types/api";
+import type { Usuario, UsuarioCreateInput, UsuarioEquipo, UsuarioRegistrarInput, UsuarioUpdateInput } from "@/types/api";
 
 /**
  * Conecta contra UsuariosController real (Nexit_Back). Actualizado 2026-08-26: ya no es un módulo
@@ -19,6 +19,13 @@ export const usuariosApi = {
   list: () => apiClient.get<Usuario[]>("/api/usuarios"),
   /** Perfil de otra persona, solo lectura -- cualquier autenticado (agregado 2026-08-26). */
   getById: (id: string) => apiClient.get<Usuario>(`/api/usuarios/${id}`),
+  /**
+   * Miembros de equipo buscables (agregado 2026-09-09) -- cualquier autenticado, a diferencia de
+   * `list`. Ya viene filtrada a rol miembro/manager (Director) activos: la usa el selector de
+   * "miembros del equipo" al armar un proyecto, pantalla a la que cualquiera con acceso a Proyectos
+   * puede entrar (no solo admin/super_admin), así que no podíamos reusar `list`.
+   */
+  equipo: () => apiClient.get<UsuarioEquipo[]>("/api/usuarios/equipo"),
   /** Exclusivo de super_admin. */
   create: (input: UsuarioCreateInput) => apiClient.post<Usuario>("/api/usuarios", input),
   /**

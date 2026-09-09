@@ -285,7 +285,7 @@ export interface FilterChip {
  * `variant="panel"` es la forma del mockup: los chips viven DENTRO de la
  * tarjeta de filtros, separados por un borde superior. `"standalone"` (el
  * valor por defecto) mantiene la fila suelta debajo del panel, que es como
- * la usan todavía Proveedores, Proyectos y Calendario.
+ * la usan todavía Proveedores y Proyectos.
  */
 export function ActiveFilters({
   chips,
@@ -337,8 +337,11 @@ export function ActiveFilters({
 /* -------------------------------------------------------------------------- */
 /* Tabs (header nav)                                                          */
 /* -------------------------------------------------------------------------- */
-export function TabsShell({ children }: { children: ReactNode }) {
-  return <div className="flex gap-0.5 rounded-[var(--radius-lg)] bg-[#EAE8E1] p-[3px]">{children}</div>;
+export function TabsShell({ children, className }: { children: ReactNode; className?: string }) {
+  // `self-start` en los consumidores que viven dentro de un `flex flex-col` -- por defecto un
+  // flex item se estira al ancho del contenedor (align-items: stretch), así que sin eso la
+  // franja gris queda ocupando todo el ancho de la página en vez de ajustarse a los botones.
+  return <div className={clsx("inline-flex gap-0.5 rounded-[var(--radius-lg)] bg-[#EAE8E1] p-[3px]", className)}>{children}</div>;
 }
 
 export function TabButton({

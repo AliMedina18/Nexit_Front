@@ -69,6 +69,26 @@ describe("useAuthStore -- nombre/iniciales derivados del correo", () => {
   });
 });
 
+describe("useAuthStore -- un refresco de token de la MISMA cuenta no reinicia el perfil", () => {
+  it("TOKEN_REFRESHED no vuelve a poner estadoPerfil en \"cargando\" ni repite GET /api/usuarios/me", async () => {
+    // Esto es justo lo que Supabase dispara cada vez que la pestaña recupera el foco -- si esto
+    // reiniciara estadoPerfil, el layout entero desaparece (ver el guard en (dashboard)/layout.tsx)
+    // y toda la pantalla vuelve a cargar de cero: el bug de "la plataforma se recarga sola".
+    meMock.mockResolvedValue({ id: "user-1", nombre: "Juliana", apellido: "Navarro", iniciales: "", email: "usuario@empresa.com", rol: "admin", activo: true });
+    const { useAuthStore } = await import("./auth-store");
+
+    authStateCallback!("SIGNED_IN", session("usuario@empresa.com", "user-1"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useAuthStore.getState().estadoPerfil).toBe("completo");
+    expect(meMock).toHaveBeenCalledTimes(1);
+
+    authStateCallback!("TOKEN_REFRESHED", session("usuario@empresa.com", "user-1"));
+    expect(useAuthStore.getState().estadoPerfil).toBe("completo");
+    expect(meMock).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("useAuthStore -- guarda contra condición de carrera al cambiar de sesión", () => {
   it("una respuesta de /me de una sesión vieja que llega tarde NO pisa a la sesión nueva", async () => {
     const { useAuthStore } = await import("./auth-store");

@@ -249,37 +249,6 @@ export interface SeguimientoProyecto extends SeguimientoProyectoInput {
 }
 
 // ---------------------------------------------------------------------------
-// Calendario
-// ---------------------------------------------------------------------------
-
-export interface CalendarioMes {
-  mes: number; // 1-12
-  cantidad: number;
-}
-
-export interface CalendarioAnio {
-  anio: number;
-  totalProyectos: number;
-  /** Siempre trae los 12 meses, con cantidad = 0 donde no hay proyectos. */
-  meses: CalendarioMes[];
-}
-
-export interface ProyectoCalendarioItem {
-  id: string;
-  nombre: string;
-  fechaEvento: string;
-  /** "yyyy-MM-dd" ya convertida a la hora local de la sede del proyecto (docs/18) -- úsala para
-   * decidir el día en el que pintarlo en el calendario, NO cortes `fechaEvento` (sigue en UTC). */
-  fechaEventoLocal: string;
-  clienteId?: string | null;
-  clienteNombre?: string | null;
-  estadoNombre: string;
-  prioridad?: string | null;
-  ciudad?: string | null;
-  sedeNext?: string | null;
-}
-
-// ---------------------------------------------------------------------------
 // Informes (solo admin/super_admin)
 // ---------------------------------------------------------------------------
 
@@ -354,6 +323,19 @@ export interface Usuario {
   fechaDesactivacion?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+}
+
+/**
+ * Versión liviana de Usuario para GET /api/usuarios/equipo (agregado 2026-09-09): a diferencia de
+ * Usuario, cualquier autenticado puede pedir esta lista -- por eso no trae email ni el resto de
+ * datos de cuenta, solo lo que hace falta para buscar y mostrar a alguien en el selector de
+ * "miembros del equipo" de un proyecto. Ya viene filtrada a rol miembro/manager (Director) activos.
+ */
+export interface UsuarioEquipo {
+  id: string;
+  nombre: string;
+  apellido: string;
+  rol: Rol;
 }
 
 // ---------------------------------------------------------------------------
@@ -451,6 +433,11 @@ export interface SolicitudEliminacion {
   id: string;
   tipoEntidad: TipoEntidadEliminable;
   entidadId: string;
+  /**
+   * Nombre de la entidad al momento de pedir la eliminación (foto, no en vivo): sobrevive aunque la
+   * entidad se elimine después. Viene en null en solicitudes creadas antes de este campo (2026-09-09).
+   */
+  entidadNombre?: string | null;
   /** Null si esa cuenta se eliminó después -- la solicitud sobrevive sin dueño. */
   solicitadoPorId?: string | null;
   motivo?: string | null;
@@ -516,9 +503,13 @@ export interface AceptarInvitacionInput {
 }
 
 /** Invitar a varios correos de una sola vez (POST /api/invitaciones/lote) -- todos con el mismo rol y mensaje. */
-export interface InvitacionLoteInput {
-  emails: string[];
+export interface InvitacionLoteDestinatario {
+  email: string;
   rol: Rol;
+}
+
+export interface InvitacionLoteInput {
+  destinatarios: InvitacionLoteDestinatario[];
   mensaje?: string | null;
 }
 

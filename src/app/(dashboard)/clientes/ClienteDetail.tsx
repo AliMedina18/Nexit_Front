@@ -14,8 +14,8 @@ import {
   DrawerIconButton,
 } from "@/components/ui/Drawer";
 import { EntityAttachments } from "@/components/ui/EntityAttachments";
+import { HistorialTimeline } from "@/components/ui/HistorialTimeline";
 import { CLIENT_STATUS_COLORS, statusColor } from "@/lib/constants";
-import { descripcionHistorial, fmtFechaHora } from "@/lib/historial";
 import { clienteAdjuntosApi } from "@/services/api/cliente-adjuntos-service";
 import { historialApi } from "@/services/api/historial-service";
 import { useCatalogosStore } from "@/store/catalogos-store";
@@ -243,7 +243,7 @@ export function ClienteDetail({
         </DetailBox>
 
         <DetailBox title="Facturación">
-          <DetailRow k="Valor de referencia" v={cliente.valorReferencia || "—"} />
+          <DetailRow k="Valor de referencia antes de IVA" v={cliente.valorReferencia || "—"} />
         </DetailBox>
 
         <DetailBox title="Notas internas">
@@ -257,22 +257,7 @@ export function ClienteDetail({
         </DetailBox>
 
         <DetailBox title="Historial de cambios" tone="plain">
-          {historialCargando ? (
-            <div className="py-1 text-sm text-text-3">Cargando…</div>
-          ) : historial.length === 0 ? (
-            <div className="py-1 text-sm text-text-3">Todavía no hay cambios registrados.</div>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {historial.map((h) => (
-                <div key={h.id} className="border-l-2 border-border pl-3 text-[13px]">
-                  <div>
-                    <b className="font-semibold">{h.usuarioNombre || "Alguien"}</b> {descripcionHistorial(h)}
-                  </div>
-                  <div className="font-mono text-[11px] text-text-3">{fmtFechaHora(h.fecha)}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          <HistorialTimeline cargando={historialCargando} historial={historial} />
         </DetailBox>
       </div>
 

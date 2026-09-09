@@ -1,11 +1,9 @@
 "use client";
 
-import { Heart, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { Avatar, Badge, CountryBadge, Stars, Tag } from "@/components/ui/primitives";
 import { PROVIDER_STATUS_COLORS, statusColor } from "@/lib/constants";
-import { useAuthStore } from "@/store/auth-store";
 import { useCatalogosStore } from "@/store/catalogos-store";
-import { useProvidersStore } from "@/store/providers-store";
 import type { Proveedor } from "@/types/api";
 
 export function ProviderCard({
@@ -18,11 +16,7 @@ export function ProviderCard({
   onEdit: () => void;
 }) {
   const { paises, categoriasProveedor, regionesPorPais, ciudadesPorRegion } = useCatalogosStore();
-  const authUser = useAuthStore((s) => s.user);
-  const marcarColaborador = useProvidersStore((s) => s.marcarColaborador);
-  const quitarColaborador = useProvidersStore((s) => s.quitarColaborador);
   const sc = statusColor(PROVIDER_STATUS_COLORS, provider.estado);
-  const esMio = Boolean(authUser && provider.colaboradores.some((c) => c.usuarioId === authUser.id));
   const paisNombre = paises.find((p) => p.id === provider.paisId)?.nombre;
   const regionNombre = regionesPorPais[provider.paisId ?? ""]?.find((r) => r.id === provider.regionId)?.nombre;
   const ciudadNombre = ciudadesPorRegion[provider.regionId ?? ""]?.find((c) => c.id === provider.ciudadId)?.nombre;
@@ -54,19 +48,6 @@ export function ProviderCard({
           {provider.estado}
         </Badge>
         {categoriaNombre && <Tag>{categoriaNombre}</Tag>}
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            void (esMio ? quitarColaborador(provider.id) : marcarColaborador(provider.id));
-          }}
-          aria-pressed={esMio}
-          aria-label={esMio ? "Quitar de mis proveedores" : "Marcar como mi proveedor"}
-          title={esMio ? "Estoy trabajando con este proveedor" : "Marcar que trabajo con este proveedor"}
-          className="ml-auto flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full text-text-3 transition-colors hover:bg-gray-light hover:text-red"
-        >
-          <Heart size={13} strokeWidth={2} fill={esMio ? "currentColor" : "none"} className={esMio ? "text-red" : undefined} />
-        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-[#EFEDE7] pt-3">

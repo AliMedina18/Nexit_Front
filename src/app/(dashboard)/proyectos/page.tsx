@@ -203,12 +203,13 @@ export default function ProyectosPage() {
       if (editing) {
         await updateProject(editing.id, input);
         pushToast("Proyecto actualizado", "success");
+        setFormOpen(false);
+        setEditing(null);
       } else {
-        await addProject(input);
+        const creado = await addProject(input);
         pushToast("Proyecto agregado", "success");
+        setEditing(creado);
       }
-      setFormOpen(false);
-      setEditing(null);
     } catch (err) {
       pushToast(err instanceof Error ? err.message : "No se pudo guardar el proyecto", "danger");
     }

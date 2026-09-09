@@ -146,7 +146,28 @@ async function refreshProfile(set: (partial: Partial<AuthState>) => void) {
  * este store solo refleja el estado de la sesión, no la crea.
  */
 export const useAuthStore = create<AuthState>((set) => {
+  // Qué cuenta (Supabase Auth id) está autenticada ahora mismo, para distinguir un cambio de
+  // sesión real de un simple refresco de token.
+  let userIdActual: string | null = null;
+
+  /**
+   * Supabase renueva el access token solo (y dispara TOKEN_REFRESHED) cada vez que la pestaña
+   * vuelve a tener foco o el token está por vencer -- para la MISMA cuenta ya autenticada, varias
+   * veces por hora. Antes, cada uno de esos eventos volvía a poner estadoPerfil en "cargando", lo
+   * que apagaba el dashboard entero (ver el guard de abajo) y disparaba de nuevo GET /api/usuarios/me
+   * y todas las cargas de cada pantalla -- por fuera se sentía como que "la plataforma se recarga
+   * sola" cada rato. Ahora solo se trata como sesión nueva (y se vuelve a pedir el perfil) cuando la
+   * cuenta autenticada de verdad cambió: inició sesión, cerró sesión, o cambió de cuenta.
+   */
   const handleSession = (session: Session | null) => {
+    const userIdNuevo = session?.user?.id ?? null;
+    if (userIdNuevo === userIdActual) {
+      // Mismo usuario, token renovado: se actualiza el JWT aproximado por si el rol cambió, sin
+      // tocar estadoPerfil ni volver a pedir el perfil -- nada de esto debe verse en la interfaz.
+      if (session) set({ user: buildUserFromSession(session) });
+      return;
+    }
+    userIdActual = userIdNuevo;
     profileRequestId++;
     set({
       user: buildUserFromSession(session),

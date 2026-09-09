@@ -104,7 +104,8 @@ function SeccionHeader({
 }: {
   icon: typeof Users;
   titulo: string;
-  descripcion: string;
+  /** Solo cuando el título y las columnas de abajo no bastan para decir de qué se trata la sección. */
+  descripcion?: string;
   conteo?: number;
   accion?: ReactNode;
 }) {
@@ -123,7 +124,7 @@ function SeccionHeader({
               </span>
             )}
           </div>
-          <div className="mt-0.5 text-[12px] text-text-3">{descripcion}</div>
+          {descripcion && <div className="mt-0.5 text-[12px] text-text-3">{descripcion}</div>}
         </div>
       </div>
       {accion}
@@ -141,7 +142,6 @@ export default function UsuariosPage() {
   const { items: projects, fetchAll: fetchProjects } = useProjectsStore();
 
   const esAdmin = authUser?.rol === "admin" || authUser?.rol === "super_admin";
-  const esSuperAdmin = authUser?.rol === "super_admin";
 
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [presencia, setPresencia] = useState<PresenciaUsuario[]>([]);
@@ -184,7 +184,7 @@ export default function UsuariosPage() {
     } catch {
       setSolicitudes([]);
     }
-    if (esSuperAdmin) {
+    if (esAdmin) {
       try {
         setInvitaciones(await invitacionesApi.list());
       } catch {
@@ -192,7 +192,7 @@ export default function UsuariosPage() {
       }
     }
     setLoading(false);
-  }, [esAdmin, esSuperAdmin, pushToast]);
+  }, [esAdmin, pushToast]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial (equipo/presencia/solicitudes/invitaciones)
@@ -201,6 +201,20 @@ export default function UsuariosPage() {
     fetchProviders();
     fetchProjects();
   }, [load, fetchClientes, fetchProviders, fetchProjects]);
+
+  /**
+   * Quien responde una invitación (o pide eliminar su cuenta) lo hace en su propia sesión, no en
+   * la de quien administra -- por eso esta pantalla no se entera sola. Mismo patrón que el
+   * heartbeat de presencia (layout.tsx): al volver a esta pestaña se refresca, así una invitación
+   * ya respondida no se queda viéndose como pendiente más de lo necesario.
+   */
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible") load();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [load]);
 
   // Buscador compartido de la barra superior -- mismo patrón que Clientes/Proveedores/Proyectos.
   useEffect(() => {
@@ -220,7 +234,7 @@ export default function UsuariosPage() {
     setToolbar({
       entidad: "usuarios",
       searchPlaceholder: "Buscar por nombre, correo o rol…",
-      puedeImportar: esSuperAdmin,
+      puedeImportar: esAdmin,
       onExport: usuariosApi.exportar,
       onImport: invitacionesApi.importar,
       onImported: load,
@@ -231,12 +245,12 @@ export default function UsuariosPage() {
         etiquetaCreados: (n) => (n === 1 ? "invitación enviada" : "invitaciones enviadas"),
         toastExito: (r) => (r.creados === 1 ? "1 invitación enviada" : `${r.creados} invitaciones enviadas`),
       },
-      // Mismo lugar que "Nuevo proyecto" o "Nuevo cliente" en las otras pantallas. Solo para
-      // super_admin: es quien puede dar de alta a alguien (docs/06).
-      ...(esSuperAdmin ? { addLabel: "Nuevo usuario", addIcon: UserPlus, onAdd: () => setRegistrarOpen(true) } : {}),
+      // Mismo lugar que "Nuevo proyecto" o "Nuevo cliente" en las otras pantallas. Admin/super_admin
+      // pueden dar de alta a alguien (docs/06, ampliado 2026-09-09: ya no exclusivo de super_admin).
+      ...(esAdmin ? { addLabel: "Nuevo usuario", addIcon: UserPlus, onAdd: () => setRegistrarOpen(true) } : {}),
     });
     return clearToolbar;
-  }, [setToolbar, clearToolbar, esSuperAdmin, load]);
+  }, [setToolbar, clearToolbar, esAdmin, load]);
 
   const presenciaPorId = useMemo(() => new Map(presencia.map((p) => [p.id, p])), [presencia]);
 
@@ -292,11 +306,18 @@ export default function UsuariosPage() {
     setFiltConexion("");
   }
 
-  function entidadNombre(tipo: TipoEntidadEliminable, id: string): string {
-    if (tipo === "cliente") return clientes.find((c) => c.id === id)?.nombre ?? "(ya eliminado)";
-    if (tipo === "proveedor") return providers.find((p) => p.id === id)?.nombre ?? "(ya eliminado)";
-    if (tipo === "usuario") return usuarioNombre(id, "(ya eliminado)");
-    return projects.find((p) => p.id === id)?.nombre ?? "(ya eliminado)";
+  /**
+   * El nombre de lo que se pidió eliminar. Desde el 2026-09-09 el backend lo guarda como fotografía
+   * en la propia solicitud (SolicitudEliminacion.entidadNombre) -- por eso sigue disponible aunque la
+   * entidad ya se haya borrado. Las dos búsquedas en listas en memoria son solo el respaldo para
+   * solicitudes creadas antes de que existiera ese campo.
+   */
+  function entidadNombre(s: SolicitudEliminacion): string {
+    if (s.entidadNombre) return s.entidadNombre;
+    if (s.tipoEntidad === "cliente") return clientes.find((c) => c.id === s.entidadId)?.nombre ?? "—";
+    if (s.tipoEntidad === "proveedor") return providers.find((p) => p.id === s.entidadId)?.nombre ?? "—";
+    if (s.tipoEntidad === "usuario") return usuarioNombre(s.entidadId, "—");
+    return projects.find((p) => p.id === s.entidadId)?.nombre ?? "—";
   }
 
   // `solicitadoPorId` puede venir en null: si esa cuenta se eliminó después, la solicitud se conserva
@@ -488,10 +509,11 @@ export default function UsuariosPage() {
                     </Td>
                     <Td>
                       <div className="flex justify-center gap-1.5">
-                        {/* Editar sigue siendo exclusivo del super_admin; pedir una eliminación no
-                            -- un administrador también puede, y de hecho es el caso normal: él la
-                            pide, y la decide quien la reciba (Nexit_Back/docs/40). */}
-                        {esSuperAdmin && (
+                        {/* Editar es admin/super_admin desde 2026-09-09 (antes exclusivo de
+                            super_admin); pedir una eliminación es de cualquiera -- un administrador
+                            también puede, y de hecho es el caso normal: él la pide, y la decide
+                            quien la reciba (Nexit_Back/docs/40). */}
+                        {esAdmin && (
                           <RowAction
                             label={esYo ? "Editar mi perfil" : `Editar a ${u.nombre}`}
                             onClick={(e) => {
@@ -527,7 +549,7 @@ export default function UsuariosPage() {
       )}
 
       {/* --- Invitaciones ------------------------------------------------- */}
-      {esSuperAdmin && (
+      {esAdmin && (
         <div className="mb-9">
           <SeccionHeader
             icon={MailPlus}
@@ -638,7 +660,6 @@ export default function UsuariosPage() {
         <SeccionHeader
           icon={ShieldQuestion}
           titulo="Solicitudes de eliminación"
-          descripcion="Nada se elimina de golpe: quien quiere dar de baja un cliente, un proveedor, un proyecto o una cuenta lo pide con su motivo y aquí se decide."
           conteo={solicitudesPorDecidir.length}
         />
 
@@ -661,7 +682,7 @@ export default function UsuariosPage() {
             </Thead>
             <tbody>
               {solicitudes.map((s) => {
-                const nombre = entidadNombre(s.tipoEntidad, s.entidadId);
+                const nombre = entidadNombre(s);
                 const estado = SOLICITUD_ESTADOS[s.estado] ?? { label: s.estado, bg: "var(--gray-light)", c: "var(--text-2)" };
                 const meToca = s.estado === "pendiente_admin";
                 return (
@@ -701,9 +722,10 @@ export default function UsuariosPage() {
                             </RowAction>
                           </>
                         ) : (
-                          <span className="text-[12px] text-text-3">
-                            {s.estado === "pendiente_gerente" ? "Le toca al gerente" : "Ya se decidió"}
-                          </span>
+                          // El estado (columna de al lado) ya dice por qué no hay nada que hacer acá
+                          // -- "Espera al gerente", "Aprobada", "Rechazada" -- repetirlo en Acciones
+                          // no agrega nada.
+                          <span className="text-[12px] text-text-3">—</span>
                         )}
                       </div>
                     </Td>
@@ -731,7 +753,7 @@ export default function UsuariosPage() {
       <UsuarioDetail
         usuario={detalle}
         presencia={detalle ? presenciaPorId.get(detalle.id) : undefined}
-        esSuperAdmin={esSuperAdmin}
+        puedeEditar={esAdmin}
         esMiPropiaCuenta={detalle?.id === authUser?.id}
         motivoNoEliminable={detalle ? motivoNoEliminable(detalle) : null}
         onClose={() => setDetalle(null)}
@@ -794,12 +816,10 @@ export default function UsuariosPage() {
         )}
         {confirmacion?.tipo === "aprobarSolicitud" && (
           <>
-            Se elimina <strong className="text-text">{confirmacion.nombre}</strong> del sistema, de verdad y sin vuelta atrás.
-            Es la decisión final: aprobar esta solicitud ejecuta el borrado.
+            Se elimina a <strong className="text-text">{confirmacion.nombre}</strong> del sistema. Es la decisión final: no se puede deshacer.
             {confirmacion.solicitud.tipoEntidad === "usuario" && (
               <div className="mt-2 text-text-3">
-                Al ser una cuenta, también se borra de Supabase y pierde el acceso de inmediato. Queda un respaldo
-                interno de quién era.
+                Pierde el acceso de inmediato. Queda un respaldo interno de quién era, por si hace falta consultarlo después.
               </div>
             )}
           </>

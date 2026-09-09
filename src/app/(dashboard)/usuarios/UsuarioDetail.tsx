@@ -27,15 +27,16 @@ import type { PresenciaUsuario, Usuario } from "@/types/api";
  * usuario, eso también falta"). Panel lateral, igual que el detalle de Cliente/Proveedor/Proyecto,
  * para no perder de vista la lista.
  *
- * Editar y eliminar solo aparecen para el super administrador, y sobre la propia cuenta salen
- * deshabilitados con el motivo a la vista: el backend ya rechaza desactivarse, quitarse el rol o
- * eliminarse a uno mismo (docs/06/docs/11), pero enterarse por un error rojo después de hacer clic
- * es peor experiencia que ver el botón apagado y entender por qué.
+ * Editar y eliminar aparecen para admin/super_admin (2026-09-09: ya no exclusivo de super_admin,
+ * varias administradoras van a manejar usuarios), y sobre la propia cuenta salen deshabilitados con
+ * el motivo a la vista: el backend ya rechaza desactivarse, quitarse el rol o eliminarse a uno mismo
+ * (docs/06/docs/11), pero enterarse por un error rojo después de hacer clic es peor experiencia que
+ * ver el botón apagado y entender por qué.
  */
 export function UsuarioDetail({
   usuario,
   presencia,
-  esSuperAdmin,
+  puedeEditar,
   esMiPropiaCuenta,
   onClose,
   onEdit,
@@ -44,7 +45,7 @@ export function UsuarioDetail({
 }: {
   usuario: Usuario | null;
   presencia: PresenciaUsuario | undefined;
-  esSuperAdmin: boolean;
+  puedeEditar: boolean;
   esMiPropiaCuenta: boolean;
   onClose: () => void;
   onEdit: () => void;
@@ -97,7 +98,7 @@ export function UsuarioDetail({
             </Badge>
           </div>
         </div>
-        {esSuperAdmin && (
+        {puedeEditar && (
           <DrawerIconButton label={esMiPropiaCuenta ? "Editar mi perfil" : "Editar"} onClick={onEdit}>
             <Pencil size={15} strokeWidth={1.9} />
           </DrawerIconButton>

@@ -1,6 +1,6 @@
 /**
  * Patrones compartidos por las vistas del dashboard (Clientes, Proyectos,
- * Proveedores, Calendario, Informe, Usuarios): título de página, fila de
+ * Proveedores, Informe, Usuarios): título de página, fila de
  * KPIs y filas de filtros. Separado de cada page.tsx a propósito -- ver
  * src/styles/README.md.
  *

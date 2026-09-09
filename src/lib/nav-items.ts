@@ -1,4 +1,4 @@
-import { BarChart3, Building2, CalendarCheck2, LayoutGrid, Truck, Users, type LucideIcon } from "lucide-react";
+import { BarChart3, Building2, CalendarCheck2, Settings, Truck, Users, type LucideIcon } from "lucide-react";
 
 /**
  * Navegación del dashboard -- una sola fuente de verdad compartida por el
@@ -12,13 +12,16 @@ export const NAV: NavItem[] = [
   { href: "/clientes", label: "Clientes", icon: Building2 },
   { href: "/proyectos", label: "Proyectos", icon: CalendarCheck2 },
   { href: "/proveedores", label: "Proveedores", icon: Truck },
-  { href: "/calendario", label: "Calendario", icon: LayoutGrid },
   { href: "/informe", label: "Informes", icon: BarChart3 },
   { href: "/usuarios", label: "Usuarios", icon: Users },
+  // 2026-09-09: Alicia pidió que quede "abajo de usuarios" -- va al final a propósito. Igual que
+  // Informes/Usuarios, se ve en el riel para cualquiera pero la página misma bloquea a quien no
+  // es admin/super_admin (ver ConfiguracionPage).
+  { href: "/configuracion", label: "Configuración", icon: Settings },
 ];
 
-/** Los primeros 3 items van en la barra inferior de móvil; el resto (Calendario,
- *  Informes, Usuarios) se ve solo en la hoja "Más" -- mismo criterio que el
+/** Los primeros 3 items van en la barra inferior de móvil; el resto (Informes,
+ *  Usuarios, Configuración) se ve solo en la hoja "Más" -- mismo criterio que el
  *  <nav class="nx-mobile"> del mockup (Clientes / Proyectos / Proveedores / Más). */
 export const MOBILE_NAV_PRIMARY = NAV.slice(0, 3);
 export const MOBILE_NAV_MORE = NAV.slice(3);

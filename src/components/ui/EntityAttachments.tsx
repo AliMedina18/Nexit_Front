@@ -179,7 +179,10 @@ export function EntityAttachments<T extends AttachmentLike>({
         className={`mb-3 flex flex-col items-center gap-2 rounded-[var(--radius-lg)] border-[1.5px] border-dashed px-4 py-6 text-center transition-colors ${uploading ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
         style={{
           borderColor: dragOver ? "var(--teal-mid)" : "var(--border-strong)",
-          background: dragOver ? "var(--teal-light)" : "transparent",
+          // Alicia 2026-09-09: la zona de arrastre se veía "un poquito oscurito" -- un
+          // relleno tenue (en vez de transparente) hace que destaque sobre el blanco del
+          // panel sin perder el patrón de "zona de arrastre" ya establecido.
+          background: dragOver ? "var(--teal-light)" : "var(--gray-light)",
         }}
       >
         {uploading ? (
@@ -209,19 +212,25 @@ export function EntityAttachments<T extends AttachmentLike>({
         />
       </div>
 
+      {/* Alicia 2026-09-09: en el panel angosto del detalle (520px) este renglón se salía del
+          contenedor -- el motivo es un gotcha clásico de flexbox: un <input> sin `min-w-0` no
+          encoge por debajo de su ancho de contenido por defecto (~20 caracteres) aunque tenga
+          `flex-1`, así que el renglón entero se desbordaba en vez de repartirse. Con `min-w-0`
+          los dos campos sí encogen para caber, y el botón (que no encoge) queda siempre visible
+          completo -- mismo ancho relativo entre los tres, ya no se corta "Agregar". */}
       <div className="mb-3 flex gap-2">
         <input
           value={linkName}
           onChange={(e) => setLinkName(e.target.value)}
           placeholder="Nombre del link"
-          className="h-10 flex-1 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-[13px] text-text outline-none transition-colors focus:border-teal-mid"
+          className="h-10 min-w-0 flex-1 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-[13px] text-text outline-none transition-colors focus:border-teal-mid"
         />
         <input
           value={linkUrl}
           onChange={(e) => setLinkUrl(e.target.value)}
           placeholder="https://…"
           onKeyDown={(e) => e.key === "Enter" && addLink()}
-          className="h-10 flex-1 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-[13px] text-text outline-none transition-colors focus:border-teal-mid"
+          className="h-10 min-w-0 flex-1 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-[13px] text-text outline-none transition-colors focus:border-teal-mid"
         />
         <button
           type="button"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Mail, Phone, X } from "lucide-react";
 import { Drawer, FormDrawerBody, FormDrawerFooter, FormDrawerHeader, FormDrawerSection } from "@/components/ui/Drawer";
 import { Dropdown } from "@/components/ui/primitives";
 import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
@@ -391,100 +391,105 @@ export function ClienteFormModal({
             </Field>
           </div>
 
-          <Field label="Teléfonos">
-            <div className="flex flex-col gap-2">
-              {form.telefonos.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {form.telefonos.map((t, idx) => (
-                    <span
-                      key={t.id ?? idx}
-                      className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
-                    >
-                      {t.telefono}
-                      {t.etiqueta ? ` · ${t.etiqueta}` : ""}
-                      <button
-                        type="button"
-                        onClick={() => removeTelefono(idx)}
-                        aria-label="Quitar teléfono"
-                        className="flex h-[18px] w-[18px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-text-2 hover:bg-black/10 hover:text-red"
+          {/* Alicia 2026-09-09: "el teléfono y el correo lo podrías acomodar uno al lado del
+              otro" -- antes cada uno era un Field de ancho completo, uno debajo del otro; con
+              Row quedan lado a lado igual que "Persona de contacto"/"Cargo" arriba. */}
+          <Row cols={2}>
+            <Field label="Teléfonos" icon={Phone}>
+              <div className="flex flex-col gap-2">
+                {form.telefonos.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {form.telefonos.map((t, idx) => (
+                      <span
+                        key={t.id ?? idx}
+                        className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
                       >
-                        <X size={11} strokeWidth={2.4} />
-                      </button>
-                    </span>
-                  ))}
+                        {t.telefono}
+                        {t.etiqueta ? ` · ${t.etiqueta}` : ""}
+                        <button
+                          type="button"
+                          onClick={() => removeTelefono(idx)}
+                          aria-label="Quitar teléfono"
+                          className="flex h-[18px] w-[18px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-text-2 hover:bg-black/10 hover:text-red"
+                        >
+                          <X size={11} strokeWidth={2.4} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    value={telDraft}
+                    onChange={(e) => setTelDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addTelefono();
+                      }
+                    }}
+                    placeholder="+57 300 000 0000"
+                    className="min-w-0 flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={addTelefono}
+                    className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+                  >
+                    Agregar
+                  </button>
                 </div>
-              )}
-              <div className="flex gap-2">
-                <Input
-                  value={telDraft}
-                  onChange={(e) => setTelDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addTelefono();
-                    }
-                  }}
-                  placeholder="+57 300 000 0000"
-                  className="flex-1"
-                />
-                <button
-                  type="button"
-                  onClick={addTelefono}
-                  className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
-                >
-                  Agregar
-                </button>
               </div>
-            </div>
-          </Field>
+            </Field>
 
-          <Field label="Correos">
-            <div className="flex flex-col gap-2">
-              {form.emails.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {form.emails.map((e, idx) => (
-                    <span
-                      key={e.id ?? idx}
-                      className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
-                    >
-                      {e.email}
-                      {e.etiqueta ? ` · ${e.etiqueta}` : ""}
-                      <button
-                        type="button"
-                        onClick={() => removeEmail(idx)}
-                        aria-label="Quitar correo"
-                        className="flex h-[18px] w-[18px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-text-2 hover:bg-black/10 hover:text-red"
+            <Field label="Correos" icon={Mail}>
+              <div className="flex flex-col gap-2">
+                {form.emails.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {form.emails.map((e, idx) => (
+                      <span
+                        key={e.id ?? idx}
+                        className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
                       >
-                        <X size={11} strokeWidth={2.4} />
-                      </button>
-                    </span>
-                  ))}
+                        {e.email}
+                        {e.etiqueta ? ` · ${e.etiqueta}` : ""}
+                        <button
+                          type="button"
+                          onClick={() => removeEmail(idx)}
+                          aria-label="Quitar correo"
+                          className="flex h-[18px] w-[18px] flex-shrink-0 cursor-pointer items-center justify-center rounded-full border-none bg-transparent text-text-2 hover:bg-black/10 hover:text-red"
+                        >
+                          <X size={11} strokeWidth={2.4} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    type="email"
+                    value={emailDraft}
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addEmail();
+                      }
+                    }}
+                    placeholder="contacto@empresa.com"
+                    className="min-w-0 flex-1"
+                  />
+                  <button
+                    type="button"
+                    onClick={addEmail}
+                    className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+                  >
+                    Agregar
+                  </button>
                 </div>
-              )}
-              <div className="flex gap-2">
-                <Input
-                  type="email"
-                  value={emailDraft}
-                  onChange={(e) => setEmailDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addEmail();
-                    }
-                  }}
-                  placeholder="contacto@empresa.com"
-                  className="flex-1"
-                />
-                <button
-                  type="button"
-                  onClick={addEmail}
-                  className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
-                >
-                  Agregar
-                </button>
               </div>
-            </div>
-          </Field>
+            </Field>
+          </Row>
         </FormDrawerSection>
 
         <FormDrawerSection number="04" title="Qué recordar">
@@ -494,7 +499,7 @@ export function ClienteFormModal({
         </FormDrawerSection>
 
         <FormDrawerSection number="05" title="Facturación">
-          <Field label="Valor de referencia">
+          <Field label="Valor de referencia antes de IVA">
             <Input
               value={form.valorReferencia}
               onChange={(e) => set("valorReferencia", e.target.value)}

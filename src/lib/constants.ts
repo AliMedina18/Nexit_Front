@@ -90,10 +90,12 @@ export const ROLES: Rol[] = ["super_admin", "admin", "manager", "miembro"];
  */
 export const ROLES_ASIGNABLES: Rol[] = ["admin", "manager", "miembro"];
 
+/** El rol "manager" (nombre técnico, sin tocar en la base de datos) se muestra como "Director" --
+ * Alicia 2026-09-09: "no es manager, sino es como director o directivo". */
 export const ROL_LABELS: Record<Rol, string> = {
   super_admin: "Super admin",
   admin: "Admin",
-  manager: "Manager",
+  manager: "Director",
   miembro: "Miembro",
 };
 
@@ -101,15 +103,18 @@ export const ROL_LABELS: Record<Rol, string> = {
 export const ROL_DESCRIPCIONES: Record<Rol, string> = {
   super_admin: "Manda en todo: es el único que crea, edita y elimina usuarios.",
   admin: "Administra el sistema y decide las solicitudes de eliminación. No toca usuarios.",
-  manager: "Gerente de sus proyectos: endosa la eliminación de los que tiene a cargo.",
+  manager: "Director de sus proyectos: endosa la eliminación de los que tiene a cargo.",
   miembro: "Trabaja en el sistema; para eliminar algo tiene que solicitarlo.",
 };
 
+/** Colores por rol -- Alicia 2026-09-09 pidió admin en verde, director en morado y miembro en azul
+ * (para distinguir roles de un vistazo al invitar a varias personas con roles distintos en un mismo
+ * envío). Super admin se mueve a ámbar porque el morado que tenía antes pasa a ser de director. */
 export const ROL_COLORS: Record<Rol, { bg: string; c: string }> = {
-  super_admin: { bg: "#EEEDFE", c: "#26215C" },
-  admin: { bg: "#E6F1FB", c: "#0C447C" },
-  manager: { bg: "#EAF3DE", c: "#27500A" },
-  miembro: { bg: "#F1EFE8", c: "#444441" },
+  super_admin: { bg: "#FAEEDA", c: "#633806" },
+  admin: { bg: "#EAF3DE", c: "#27500A" },
+  manager: { bg: "#EEEDFE", c: "#26215C" },
+  miembro: { bg: "#E6F1FB", c: "#0C447C" },
 };
 
 /** Estado de la cuenta -- distinto de estar conectado ahora mismo (eso es presencia, HU-12). */

@@ -565,25 +565,9 @@ export function ProviderFormModal({
               </button>
             </div>
           </Field>
-          {/* Aforo y costo de referencia: reales, sin equivalente en el mockup -- van al final
-              de la sección en vez de perderse. */}
-          <Row cols={2}>
-            <Field label="Aforo">
-              <Input
-                type="number"
-                value={form.aforo}
-                onChange={(e) => set("aforo", e.target.value)}
-                placeholder="Ej. 300"
-              />
-            </Field>
-            <Field label="Costo de referencia">
-              <Input
-                value={form.costoReferencia}
-                onChange={(e) => set("costoReferencia", e.target.value)}
-                placeholder="Ej. $2.500.000 / evento"
-              />
-            </Field>
-          </Row>
+          {/* Alicia 2026-09-09: "más espacio para las notas internas, es importante para todo,
+              proveedor, clientes y proyectos" -- !min-h-[...] pisa el min-h-[72px] por defecto
+              del Textarea compartido. */}
           <Field
             label="Notas internas"
             hint={
@@ -592,11 +576,14 @@ export function ProviderFormModal({
               </div>
             }
           >
-            <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Escribe aquí lo importante" />
+            <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Escribe aquí lo importante" className="!min-h-[140px]" />
           </Field>
         </FormDrawerSection>
 
         <FormDrawerSection number="05" title="Archivos y enlaces">
+          {/* Alicia 2026-09-09: "otra vez lo de archivos y enlaces, que esté en la parte ya de
+              una vez de registrar proveedor, no tengo que esperar a editarlo" -- mismo patrón de
+              Clientes/Proyectos: `handleSave` en page.tsx ya no cierra el drawer al crear. */}
           {editing ? (
             <EntityAttachments entityId={editing.id} api={proveedorAdjuntosApi} />
           ) : (

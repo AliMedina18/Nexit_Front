@@ -29,12 +29,12 @@ export function ProviderPicker({
   return (
     <div>
       <div className="relative mb-2">
-        <Search size={14} strokeWidth={2} className="pointer-events-none absolute left-[9px] top-1/2 -translate-y-1/2 text-text-3" />
+        <Search size={14} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-3" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar proveedor por nombre o categoría…"
-          className="w-full rounded-[var(--radius-md)] border border-border bg-surface py-1.5 pl-[30px] pr-2.5 text-[13px] outline-none focus:border-teal-mid"
+          className="h-10 w-full rounded-[var(--radius-md)] border border-border bg-surface py-2 pl-[34px] pr-3 text-[13px] outline-none transition-colors focus:border-teal-mid"
         />
       </div>
       <div className="mb-1.5 text-xs text-text-2">{selectedIds.size} proveedores seleccionados</div>

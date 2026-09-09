@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, FolderOpen, Heart, LayoutGrid, Pencil, Rows3 } from "lucide-react";
+import { AlertTriangle, FolderOpen, LayoutGrid, Pencil, Rows3 } from "lucide-react";
 import {
   ActiveFilters,
   Avatar,
@@ -78,7 +78,6 @@ export default function ProveedoresPage() {
   const [filtCiudad, setFiltCiudad] = useState("");
   const [filtCat, setFiltCat] = useState("");
   const [filtEstado, setFiltEstado] = useState("");
-  const [soloMios, setSoloMios] = useState(false);
   const [view, setView] = useState<"cards" | "table">("cards");
   // Columnas de la grilla de tarjetas calculadas para llenar el ancho
   // disponible sin franja vacía, con o sin el riel expandido (Alicia
@@ -104,7 +103,6 @@ export default function ProveedoresPage() {
       filtCiudad: string;
       filtCat: string;
       filtEstado: string;
-      soloMios: boolean;
       view: "cards" | "table";
     }>("proveedores");
     if (!saved) return;
@@ -115,7 +113,6 @@ export default function ProveedoresPage() {
     if (saved.filtCiudad !== undefined) setFiltCiudad(saved.filtCiudad);
     if (saved.filtCat !== undefined) setFiltCat(saved.filtCat);
     if (saved.filtEstado !== undefined) setFiltEstado(saved.filtEstado);
-    if (saved.soloMios !== undefined) setSoloMios(saved.soloMios);
     // Alicia 2026-09-08: NO restauramos `view` (Tarjetas/Tabla) desde la sesion
     // guardada. Esto era la causa real de "me aparece una tarjeta supergrande":
     // cada pantalla (Clientes/Proveedores/Proyectos) recordaba su propia vista
@@ -136,10 +133,9 @@ export default function ProveedoresPage() {
       filtCiudad,
       filtCat,
       filtEstado,
-      soloMios,
       view,
     });
-  }, [search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado, soloMios, view]);
+  }, [search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado, view]);
 
   useEffect(() => {
     function onGlobalSearch(event: Event) {
@@ -182,20 +178,6 @@ export default function ProveedoresPage() {
     if (v) fetchCiudades(v);
   }
 
-  const misProveedoresCount = useMemo(
-    () => (authUser ? providers.filter((p) => p.colaboradores.some((c) => c.usuarioId === authUser.id)).length : 0),
-    [providers, authUser],
-  );
-
-  // Si ya no queda ningún proveedor marcado (p. ej. Alicia quita el último
-  // corazón mientras el filtro está activo), el botón de abajo se oculta --
-  // apagamos el filtro con él para no dejar la lista atascada en "0 de 0"
-  // sin ninguna forma visible de destrabarla.
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- apaga el filtro solo cuando la lista de "mios" queda en 0, no en cada render
-    if (misProveedoresCount === 0 && soloMios) setSoloMios(false);
-  }, [misProveedoresCount, soloMios]);
-
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
     return providers.filter((p) => {
@@ -207,17 +189,16 @@ export default function ProveedoresPage() {
       const matchesCiudad = !filtCiudad || p.ciudadId === filtCiudad;
       const matchesCat = !filtCat || p.categoriaId === filtCat;
       const matchesEstado = !filtEstado || p.estado === filtEstado;
-      const matchesMios = !soloMios || (authUser && p.colaboradores.some((c) => c.usuarioId === authUser.id));
-      return matchesSearch && matchesPais && matchesRegion && matchesCiudad && matchesCat && matchesEstado && matchesMios;
+      return matchesSearch && matchesPais && matchesRegion && matchesCiudad && matchesCat && matchesEstado;
     });
-  }, [providers, search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado, soloMios, authUser]);
+  }, [providers, search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado]);
 
   // Vuelve a la página 1 cada vez que cambia el resultado filtrado -- si no, quedarse en la
   // página 3 con un filtro que deja solo 1 resultado mostraría una lista vacía sin explicación.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reset intencional al cambiar de filtro/vista, no una sincronización derivable sin efecto
     setPage(1);
-  }, [search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado, soloMios, view]);
+  }, [search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado, view]);
 
   const per = perPage === 0 ? Math.max(filtered.length, 1) : perPage;
   const totalPages = Math.max(1, Math.ceil(filtered.length / per));
@@ -240,7 +221,6 @@ export default function ProveedoresPage() {
     filtCiudad && { key: "ciudad", label: cityOptions.find((c) => c.id === filtCiudad)?.nombre ?? filtCiudad },
     filtCat && { key: "cat", label: categoriasProveedor.find((c) => c.id === filtCat)?.nombre ?? filtCat },
     filtEstado && { key: "estado", label: filtEstado },
-    soloMios && { key: "mios", label: "Mis proveedores" },
   ].filter(Boolean) as FilterChip[];
 
   function removeChip(key: string) {
@@ -250,7 +230,6 @@ export default function ProveedoresPage() {
     if (key === "ciudad") setFiltCiudad("");
     if (key === "cat") setFiltCat("");
     if (key === "estado") setFiltEstado("");
-    if (key === "mios") setSoloMios(false);
   }
 
   function clearAll() {
@@ -260,7 +239,6 @@ export default function ProveedoresPage() {
     setFiltCiudad("");
     setFiltCat("");
     setFiltEstado("");
-    setSoloMios(false);
   }
 
   async function handleSave(input: ProveedorInput) {
@@ -268,12 +246,13 @@ export default function ProveedoresPage() {
       if (editing) {
         await updateProvider(editing.id, input);
         pushToast("Proveedor actualizado", "success");
+        setFormOpen(false);
+        setEditing(null);
       } else {
-        await addProvider(input);
+        const creado = await addProvider(input);
         pushToast("Proveedor agregado", "success");
+        setEditing(creado);
       }
-      setFormOpen(false);
-      setEditing(null);
     } catch (err) {
       pushToast(err instanceof Error ? err.message : "No se pudo guardar el proveedor", "danger");
     }
@@ -350,26 +329,6 @@ export default function ProveedoresPage() {
       </div>
 
       <div className={`mb-4 ${styles.filtersPanel}`}>
-        {/* Antes aparecía siempre, incluso en "Mis proveedores (0)" cuando
-           nadie había marcado ninguno todavía -- un filtro que solo puede
-           devolver una lista vacía no debería estar a la vista. Ahora solo
-           se muestra una vez que hay al menos un proveedor marcado. */}
-        {misProveedoresCount > 0 && (
-          <div className="mb-3 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSoloMios((v) => !v)}
-              aria-pressed={soloMios}
-              className={`flex h-8 items-center gap-[7px] rounded-[20px] border px-3 text-[13px] font-medium transition-colors ${
-                soloMios ? "border-text bg-text text-white" : "border-border bg-surface text-text hover:border-text"
-              }`}
-            >
-              <Heart size={13} strokeWidth={1.8} fill={soloMios ? "currentColor" : "none"} />
-              Mis proveedores ({misProveedoresCount})
-            </button>
-          </div>
-        )}
-
         <div className={styles.filterControls}>
           <Dropdown
             value={filtPais}

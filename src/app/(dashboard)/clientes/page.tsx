@@ -197,12 +197,17 @@ export default function ClientesPage() {
       if (editing) {
         await updateCliente(editing.id, input);
         pushToast("Cliente actualizado", "success");
+        setFormOpen(false);
+        setEditing(null);
       } else {
-        await addCliente(input);
+        const creado = await addCliente(input);
         pushToast("Cliente agregado", "success");
+        // Se queda abierto, ahora editando al cliente recién creado -- Alicia 2026-09-09: la
+        // sección "Archivos y enlaces" necesita un id real (no existe hasta guardar), así que
+        // antes solo funcionaba al volver a abrir el cliente para editarlo. Pasando derecho a
+        // modo edición queda lista de una vez, sin ese paso extra.
+        setEditing(creado);
       }
-      setFormOpen(false);
-      setEditing(null);
     } catch (err) {
       pushToast(err instanceof Error ? err.message : "No se pudo guardar el cliente", "danger");
     }

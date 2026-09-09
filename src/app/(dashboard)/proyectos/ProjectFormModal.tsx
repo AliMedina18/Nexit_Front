@@ -15,15 +15,13 @@ import { useClientesStore } from "@/store/clientes-store";
 import { useUiStore } from "@/store/ui-store";
 import { proyectoAdjuntosApi } from "@/services/api/proyecto-adjuntos-service";
 import { usuariosApi } from "@/services/api/usuarios-service";
-import type { Proveedor, Proyecto, ProyectoEquipoMiembro, ProyectoInput, Usuario } from "@/types/api";
+import type { Proveedor, Proyecto, ProyectoEquipoMiembro, ProyectoInput, UsuarioEquipo } from "@/types/api";
 import { ProviderPicker } from "./ProviderPicker";
 
 const BRIEF_ESTADOS = ["Pendiente por enviar", "Entregado, a espera de respuesta", "Requiere ajustes", "Aprobado"];
 // Debe calzar EXACTO con `Propuestas` en Nexit_Back/.../Validators/Proyectos/ProyectoValidators.cs
 // -- si no coincide, guardar el proyecto falla en el backend con "El estado de la propuesta no es válido.".
 const PROPUESTA_ESTADOS = ["No enviada", "En proceso", "Enviada"];
-// Debe calzar EXACTO con `Roles` en el mismo validator (usado por el picker de rol del equipo, abajo).
-const ROLES_EQUIPO = ["Ejecutivo", "Comercial", "Administrativo", "Diseñador 3D", "Diseñador gráfico"];
 // Listas base del mockup aprobado -- el valor ya guardado en un proyecto viejo (si no está
 // en esta lista) se agrega igual como opción extra, para no perderlo por venir de antes de
 // que este campo se volviera un dropdown cerrado.
@@ -101,11 +99,17 @@ export function ProjectFormModal({
   const { items: clientes, fetchAll: fetchClientes } = useClientesStore();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [gerentes, setGerentes] = useState<Usuario[]>([]);
+  // Personas buscables para "miembros del equipo" (Alicia 2026-09-09): ya vienen filtradas por el
+  // backend a solo rol miembro/manager (Director) activos -- ver GET /api/usuarios/equipo. A
+  // diferencia del antiguo `usuariosApi.list()` (admin/super_admin exclusivo), esto lo puede pedir
+  // cualquiera que esté armando un proyecto.
+  const [equipoUsuarios, setEquipoUsuarios] = useState<UsuarioEquipo[]>([]);
+  // Fallback para un proyecto viejo cuyo gerente/líder guardado ya no aparece entre los miembros
+  // de equipo actuales (p. ej. se le quitó del equipo, o el proyecto es de antes de este cambio) --
+  // así igual se ve su nombre en el selector en vez de quedar en blanco.
+  const [liderFallback, setLiderFallback] = useState<UsuarioEquipo | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const panelRef = useRef<HTMLDivElement>(null);
-  const [miembroRolDraft, setMiembroRolDraft] = useState("");
-  const [miembroNombreDraft, setMiembroNombreDraft] = useState("");
 
   const puedeAsignarGerente = user?.rol === "admin" || user?.rol === "super_admin";
 
@@ -113,10 +117,46 @@ export function ProjectFormModal({
     if (!open) return;
     fetchBase();
     fetchClientes();
-    if (puedeAsignarGerente) {
-      usuariosApi.list().then(setGerentes).catch(() => setGerentes([]));
+    usuariosApi.equipo().then(setEquipoUsuarios).catch(() => setEquipoUsuarios([]));
+  }, [open, fetchBase, fetchClientes]);
+
+  // Miembros del equipo ya agregados, resueltos contra `equipoUsuarios` por nombre completo --
+  // `ProyectoEquipoMiembro` no guarda un usuarioId real (es texto libre desde antes de este
+  // cambio), así que el cruce por nombre es lo único disponible. Sirve tanto para lo agregado en
+  // esta sesión como para reconciliar el equipo ya guardado de un proyecto existente al editarlo.
+  const equipoSeleccionado = useMemo(() => {
+    return form.equipo
+      .map((m) => equipoUsuarios.find((u) => `${u.nombre} ${u.apellido}`.trim().toLowerCase() === m.nombre.trim().toLowerCase()))
+      .filter((u): u is UsuarioEquipo => !!u);
+  }, [form.equipo, equipoUsuarios]);
+
+  useEffect(() => {
+    if (!open || !editing?.gerenteId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el fallback al cerrar o cuando el proyecto no tiene líder guardado
+      setLiderFallback(null);
+      return;
     }
-  }, [open, fetchBase, fetchClientes, puedeAsignarGerente]);
+    if (equipoSeleccionado.some((u) => u.id === editing.gerenteId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- ya está entre los miembros agregados, no hace falta el fallback
+      setLiderFallback(null);
+      return;
+    }
+    let cancelado = false;
+    usuariosApi
+      .getById(editing.gerenteId)
+      .then((u) => {
+        if (!cancelado) setLiderFallback({ id: u.id, nombre: u.nombre, apellido: u.apellido, rol: u.rol });
+      })
+      .catch(() => {
+        if (!cancelado) setLiderFallback(null);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [open, editing, equipoSeleccionado]);
+
+  const liderOptions = liderFallback && !equipoSeleccionado.some((u) => u.id === liderFallback.id) ? [...equipoSeleccionado, liderFallback] : equipoSeleccionado;
+  const miembrosDisponibles = equipoUsuarios.filter((u) => !equipoSeleccionado.some((s) => s.id === u.id));
 
   // Autoguardado (Alicia 2026-09-07): una key por proyecto (o "nuevo" para
   // el formulario en blanco) -- así el borrador de uno no se mezcla con el
@@ -169,8 +209,6 @@ export function ProjectFormModal({
       setSelectedIds(new Set(baseProveedorIds));
     }
     setErrors({});
-    setMiembroRolDraft("");
-    setMiembroNombreDraft("");
     // eslint-disable-next-line react-hooks/exhaustive-deps -- draftKey se deriva de `editing`, y pushToast es estable
   }, [open, editing]);
 
@@ -210,18 +248,23 @@ export function ProjectFormModal({
     });
   }
 
-  function addMiembro() {
-    if (!miembroNombreDraft.trim()) return;
-    set("equipo", [...form.equipo, { rol: miembroRolDraft.trim(), nombre: miembroNombreDraft.trim() }]);
-    setMiembroRolDraft("");
-    setMiembroNombreDraft("");
+  // Agregar ya no pide rol (Alicia 2026-09-09): buscar el nombre y elegirlo de la lista basta.
+  function addMiembro(usuarioId: string) {
+    const u = equipoUsuarios.find((x) => x.id === usuarioId);
+    if (!u) return;
+    set("equipo", [...form.equipo, { rol: "", nombre: `${u.nombre} ${u.apellido}`.trim() }]);
   }
 
   function removeMiembro(idx: number) {
-    set(
-      "equipo",
-      form.equipo.filter((_, i) => i !== idx),
-    );
+    const quitado = form.equipo[idx];
+    // Si a quien se quita era el líder de equipo seleccionado, se limpia esa selección -- no
+    // tiene sentido dejar como líder a alguien que ya no está en el equipo del proyecto.
+    const eraLider = quitado && equipoSeleccionado.find((u) => `${u.nombre} ${u.apellido}`.trim().toLowerCase() === quitado.nombre.trim().toLowerCase())?.id === form.gerenteId;
+    setForm((f) => ({
+      ...f,
+      equipo: f.equipo.filter((_, i) => i !== idx),
+      gerenteId: eraLider ? "" : f.gerenteId,
+    }));
   }
 
   /** "Importar datos" -- rellena el formulario desde la primera fila de un CSV. Cliente y
@@ -367,7 +410,9 @@ export function ProjectFormModal({
 
           <Row cols={2}>
             <Field label="Ciudad del evento">
-              <Input value={form.ciudad} onChange={(e) => set("ciudad", e.target.value)} placeholder="Bogotá" />
+              {/* Alicia 2026-09-09: este campo se veía más bajito que el dropdown de al lado --
+                  h-10 lo iguala a la altura fija (40px) del botón de Dropdown. */}
+              <Input value={form.ciudad} onChange={(e) => set("ciudad", e.target.value)} placeholder="Bogotá" className="h-10" />
             </Field>
             <Field label="Sede de Next a cargo">
               <Dropdown
@@ -382,7 +427,9 @@ export function ProjectFormModal({
           <Field label="Fecha de solicitud">
             <Input type="date" value={form.fechaSolicitud} onChange={(e) => set("fechaSolicitud", e.target.value)} />
           </Field>
-          <Field label="Contacto en el cliente">
+          {/* Alicia 2026-09-09: "contacto en el cliente" no era claro -- renombrado a "Persona de
+              contacto" (mismo nombre de campo que ya usa Clientes para lo mismo). */}
+          <Field label="Persona de contacto">
             <Input
               value={form.contactoProyecto}
               onChange={(e) => set("contactoProyecto", e.target.value)}
@@ -411,48 +458,40 @@ export function ProjectFormModal({
             </Field>
           </Row>
 
-          <div className="grid grid-cols-1 gap-3 min-[1001px]:grid-cols-2 min-[1001px]:items-end">
-            <Field label="Estado de la propuesta">
-              <Dropdown
-                value={form.propuestaEstado}
-                onChange={(v) => set("propuestaEstado", v || PROPUESTA_ESTADOS[0])}
-                placeholder="Elige un estado"
-                options={withCurrent(PROPUESTA_ESTADOS, form.propuestaEstado).map((p) => ({ value: p, label: p }))}
-              />
-            </Field>
-            <Field label={`Avance (${form.porcentajeAvance}%)`}>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={form.porcentajeAvance}
-                onChange={(e) => set("porcentajeAvance", Number(e.target.value))}
-                className="h-[46px] w-full cursor-pointer accent-teal-mid"
-              />
-            </Field>
-          </div>
+          <Field label="Estado de la propuesta">
+            <Dropdown
+              value={form.propuestaEstado}
+              onChange={(v) => set("propuestaEstado", v || PROPUESTA_ESTADOS[0])}
+              placeholder="Elige un estado"
+              options={withCurrent(PROPUESTA_ESTADOS, form.propuestaEstado).map((p) => ({ value: p, label: p }))}
+            />
+          </Field>
 
-          <div className="grid grid-cols-1 gap-3 min-[1001px]:grid-cols-[1.6fr_auto] min-[1001px]:items-end">
+          <label className="mb-3.5 flex h-10 w-fit cursor-pointer items-center gap-2 whitespace-nowrap text-sm font-medium text-text">
+            <input
+              type="checkbox"
+              checked={form.pagado}
+              onChange={(e) => set("pagado", e.target.checked)}
+              className="h-4 w-4 cursor-pointer accent-teal-mid"
+            />
+            Pagado
+          </label>
+          {/* Alicia 2026-09-09: "número de factura y fecha de pago pueden ir uno al lado del otro". */}
+          <Row cols={2}>
             <Field label="N.º de factura">
               <Input value={form.numeroFactura} onChange={(e) => set("numeroFactura", e.target.value)} placeholder="Ej. FAC-2026-0000" />
             </Field>
-            <label className="mb-3.5 flex h-[46px] cursor-pointer items-center gap-2 whitespace-nowrap px-1 text-sm font-medium text-text">
-              <input
-                type="checkbox"
-                checked={form.pagado}
-                onChange={(e) => set("pagado", e.target.checked)}
-                className="h-4 w-4 cursor-pointer accent-teal-mid"
-              />
-              Pagado
-            </label>
-          </div>
-          <Field label="Fecha de pago" error={errors.fechaPago}>
-            <Input type="date" value={form.fechaPago} onChange={(e) => set("fechaPago", e.target.value)} />
-          </Field>
+            <Field label="Fecha de pago" error={errors.fechaPago}>
+              <Input type="date" value={form.fechaPago} onChange={(e) => set("fechaPago", e.target.value)} />
+            </Field>
+          </Row>
         </FormDrawerSection>
 
         <FormDrawerSection number="03" title="Equipo">
+          {/* Alicia 2026-09-09: "solamente hay que buscar el nombre del miembro del equipo a
+              agregar. No es necesario elegir un rol" -- buscar y elegir ya lo agrega, sin rol. La
+              lista de opciones (equipoUsuarios) ya viene del backend filtrada a rol miembro/manager
+              (Director): administradores y superadministradores no participan de un equipo. */}
           <Field label="Miembros del equipo">
             <div className="flex flex-col gap-2">
               {form.equipo.length > 0 && (
@@ -462,7 +501,6 @@ export function ProjectFormModal({
                       key={m.id ?? idx}
                       className="inline-flex items-center gap-1.5 rounded-[20px] bg-gray-light py-1.5 pl-3 pr-1.5 text-[13px]"
                     >
-                      {m.rol ? `${m.rol}: ` : ""}
                       {m.nombre}
                       <button
                         type="button"
@@ -476,45 +514,27 @@ export function ProjectFormModal({
                   ))}
                 </div>
               )}
-              <div className="flex gap-2">
-                <div className="w-[160px] flex-shrink-0">
-                  <Dropdown
-                    value={miembroRolDraft}
-                    onChange={(v) => setMiembroRolDraft(v)}
-                    placeholder="Rol"
-                    options={ROLES_EQUIPO.map((r) => ({ value: r, label: r }))}
-                  />
-                </div>
-                <Input
-                  value={miembroNombreDraft}
-                  onChange={(e) => setMiembroNombreDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      addMiembro();
-                    }
-                  }}
-                  placeholder="Nombre"
-                  className="flex-1"
-                />
-                <button
-                  type="button"
-                  onClick={addMiembro}
-                  className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
-                >
-                  Agregar
-                </button>
-              </div>
+              <Dropdown
+                value=""
+                onChange={addMiembro}
+                placeholder="Buscar y agregar por nombre…"
+                options={miembrosDisponibles.map((u) => ({ value: u.id, label: `${u.nombre} ${u.apellido}` }))}
+              />
             </div>
           </Field>
 
           {puedeAsignarGerente && (
-            <Field label="Gerente responsable" hint={<div className="mt-1.5 text-xs text-text-3">Si lo dejas vacío, se te asigna a ti.</div>}>
+            // Alicia 2026-09-09: "ya teniendo los nombres ya seleccionados de los miembros de
+            // equipo, ahí sí ya va a aparecer el select... no sería el líder, sino el líder de
+            // equipo" -- reemplaza a "Gerente responsable"; las opciones salen solo de quienes ya
+            // se agregaron arriba (`liderOptions`, que además reconcilia un líder ya guardado de
+            // antes que ya no esté en la lista de equipo actual).
+            <Field label="Líder de equipo" hint={<div className="mt-1.5 text-xs text-text-3">Si lo dejas vacío, se te asigna a ti.</div>}>
               <Dropdown
                 value={form.gerenteId}
                 onChange={(v) => set("gerenteId", v)}
-                placeholder="Auto-asignar"
-                options={gerentes.map((g) => ({ value: g.id, label: `${g.nombre} ${g.apellido}` }))}
+                placeholder={equipoSeleccionado.length === 0 ? "Agrega miembros al equipo primero" : "Auto-asignar"}
+                options={liderOptions.map((u) => ({ value: u.id, label: `${u.nombre} ${u.apellido}` }))}
               />
             </Field>
           )}
@@ -524,12 +544,19 @@ export function ProjectFormModal({
           <Field label="Proveedores trabajando en este proyecto">
             <ProviderPicker providers={providers} selectedIds={selectedIds} onToggle={toggleProvider} />
           </Field>
+          {/* Alicia 2026-09-09: "más espacio para las notas internas, es importante para todo,
+              proveedor, clientes y proyectos" -- !min-h-[...] para pisar el min-h-[72px] por
+              defecto del Textarea compartido (mismo patrón de !bg-surface ya usado en este archivo). */}
           <Field label="Notas internas">
-            <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Detalles, alcance, condiciones…" />
+            <Textarea value={form.notas} onChange={(e) => set("notas", e.target.value)} placeholder="Detalles, alcance, condiciones…" className="!min-h-[140px]" />
           </Field>
         </FormDrawerSection>
 
         <FormDrawerSection number="05" title="Archivos y enlaces">
+          {/* Alicia 2026-09-09: "no tengo que registrar el proyecto primero para que luego me
+              salga en editar" -- igual que Clientes, `handleSave` en page.tsx ya no cierra el
+              drawer al crear: deja `editing` apuntando al proyecto recién creado, así esta
+              sección queda usable de una vez. */}
           {editing ? (
             <EntityAttachments entityId={editing.id} api={proyectoAdjuntosApi} />
           ) : (

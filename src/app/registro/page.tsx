@@ -5,22 +5,19 @@ import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { AuthShell } from "@/components/ui/AuthShell";
 import { Button } from "@/components/ui/primitives";
-import { Field, Input } from "@/components/ui/form";
+import { Field, Input, PasswordInput } from "@/components/ui/form";
+import { inicialesPersona } from "@/lib/format";
 import { Spinner } from "@/components/ui/Spinner";
 import { ApiError } from "@/lib/api-client";
 import { getLastSection } from "@/lib/last-section";
 import { supabase } from "@/lib/supabase-client";
+import { validatePassword } from "@/lib/password-policy";
+import { authApi } from "@/services/api";
 import { invitacionesApi } from "@/services/api/invitaciones-service";
 import { useAuthStore } from "@/store/auth-store";
 import { useUiStore } from "@/store/ui-store";
-import type { Invitacion, Rol } from "@/types/api";
-
-const ROL_LABELS: Record<Rol, string> = {
-  super_admin: "Super admin",
-  admin: "Admin",
-  manager: "Manager",
-  miembro: "Miembro",
-};
+import { ROL_LABELS } from "@/lib/constants";
+import type { Invitacion } from "@/types/api";
 
 /**
  * Registro obligatorio: el paso que le falta a HU-11 (docs/25 de Nexit_Back, "la persona invitada
@@ -28,13 +25,21 @@ const ROL_LABELS: Record<Rol, string> = {
  * que quien era invitado entraba al dashboard sin perfil y sin poder hacer nada.
  *
  * A dónde llega quien ve esta pantalla: ya se autenticó en Supabase Auth (aceptó el correo de
- * invitación y creó su contraseña), pero todavía no tiene fila en `usuarios`. Ese es el estado
- * "sin-perfil" del auth-store, y es también lo que Nexit_Back bloquea de verdad con
- * PerfilRequeridoFilter -- o sea, esto no es un adorno del frontend: sin completar este paso, la
- * API le responde 403 a todo lo demás. Nombre y apellido los escribe ella misma, no quien invita
- * (decisión de docs/25).
+ * invitación), pero todavía no tiene fila en `usuarios` NI contraseña propia -- el enlace del
+ * correo la deja con una sesión temporal, nada más. Ese es el estado "sin-perfil" del auth-store,
+ * y es también lo que Nexit_Back bloquea de verdad con PerfilRequeridoFilter -- o sea, esto no es
+ * un adorno del frontend: sin completar este paso, la API le responde 403 a todo lo demás. Nombre
+ * y apellido los escribe ella misma, no quien invita (decisión de docs/25).
+ *
+ * Dos pasos, no uno (2026-09-09, docs/42, pedido de Alicia): primero el perfil (nombre/apellido),
+ * y solo DESPUÉS la contraseña -- antes se entraba al dashboard con la sesión temporal de la
+ * invitación, sin contraseña propia todavía, y había que crearla más adelante por el flujo de
+ * código de un solo uso de `/login` (docs/30). Ahora, al aceptar, se crea todo de una vez: el
+ * perfil primero (para no perder nombre/apellido si algo falla después) y la contraseña enseguida,
+ * antes de dejarla entrar.
  */
 type Estado = "cargando" | "invitacion" | "sin-invitacion" | "error";
+type Paso = "perfil" | "contrasena";
 
 export default function RegistroPage() {
   const router = useRouter();
@@ -49,9 +54,11 @@ export default function RegistroPage() {
   const [invitacion, setInvitacion] = useState<Invitacion | null>(null);
   const [mensajeError, setMensajeError] = useState<string | null>(null);
 
+  const [paso, setPaso] = useState<Paso>("perfil");
   const [nombre, setNombre] = useState("");
   const [apellido, setApellido] = useState("");
-  const [iniciales, setIniciales] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -85,6 +92,8 @@ export default function RegistroPage() {
     cargarInvitacion();
   }, [hydrated, user, estadoPerfil, cargarInvitacion]);
 
+  /** Paso 1: crea el perfil (nombre/apellido). Todavía no entra a ningún lado -- pasa al paso de
+   * la contraseña, que es lo que de verdad la deja usar el sistema. */
   async function aceptar() {
     if (!invitacion) return;
     if (!nombre.trim() || !apellido.trim()) {
@@ -97,8 +106,38 @@ export default function RegistroPage() {
       await invitacionesApi.aceptar(invitacion.id, {
         nombre: nombre.trim(),
         apellido: apellido.trim(),
-        iniciales: iniciales.trim() || null,
       });
+      setPaso("contrasena");
+    } catch (error) {
+      setErrorFormulario(error instanceof Error ? error.message : "No se pudo crear tu perfil.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  /** Paso 2: crea la contraseña de verdad (hasta acá, la sesión era la temporal del enlace del
+   * correo) y solo entonces entra al sistema. */
+  async function crearContrasenaYEntrar() {
+    const validationError = validatePassword(password, confirmPassword);
+    if (validationError) {
+      setErrorFormulario(validationError);
+      return;
+    }
+    setEnviando(true);
+    setErrorFormulario(null);
+    try {
+      const { error: err } = await supabase.auth.updateUser({ password });
+      if (err) {
+        setErrorFormulario(err.message);
+        return;
+      }
+      try {
+        // Best-effort (docs/30): marca la cuenta como "recurrente" para la próxima vez. Si falla,
+        // no bloquea la entrada -- el enlace manual de respaldo en /login sigue disponible.
+        await authApi.confirmarContrasena();
+      } catch {
+        // Silencioso a propósito -- ver comentario de arriba.
+      }
       // El rol viaja en el JWT, y lo pone el Auth Hook de Supabase leyendo `usuarios` (ver
       // docs/schema/03_auth_hook_custom_claims.sql). El token que esta persona tiene en la mano
       // se emitió ANTES de que existiera su fila, así que todavía dice "miembro" sin importar el
@@ -106,10 +145,10 @@ export default function RegistroPage() {
       // real -- sin esto entraría con permisos de miembro hasta que su token venciera solo.
       await supabase.auth.refreshSession();
       await recargarPerfil();
-      pushToast("Listo, tu perfil quedó creado", "success");
+      pushToast("Listo, tu cuenta quedó creada", "success");
       router.replace(getLastSection());
     } catch (error) {
-      setErrorFormulario(error instanceof Error ? error.message : "No se pudo crear tu perfil.");
+      setErrorFormulario(error instanceof Error ? error.message : "No se pudo crear tu contraseña.");
     } finally {
       setEnviando(false);
     }
@@ -170,13 +209,13 @@ export default function RegistroPage() {
         </>
       )}
 
-      {estado === "invitacion" && invitacion && (
+      {estado === "invitacion" && invitacion && paso === "perfil" && (
         <>
           <div className="mb-1.5 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">Completa tu registro</div>
           <div className="mb-6 text-[15px] leading-[1.55] text-text-3">
             {invitacion.invitadoPorNombre ? `${invitacion.invitadoPorNombre} te invitó` : "Te invitaron"} a Nexit como{" "}
             <span className="font-medium text-text">{ROL_LABELS[invitacion.rol] ?? invitacion.rol}</span>. Escribe tu
-            nombre para crear tu perfil.
+            nombre y tu apellido para crear tu perfil.
           </div>
 
           {invitacion.mensaje && (
@@ -204,18 +243,22 @@ export default function RegistroPage() {
               onKeyDown={(e) => e.key === "Enter" && aceptar()}
             />
           </Field>
-          <Field
-            label="Iniciales"
-            hint={<div className="mt-1 text-xs text-text-3">Opcional. Es lo que se ve en tu avatar; si lo dejas vacío se arma con tu nombre.</div>}
-          >
-            <Input
-              value={iniciales}
-              onChange={(e) => setIniciales(e.target.value)}
-              placeholder="Ej. LR"
-              maxLength={3}
-              style={{ height: 48, padding: "0 14px", fontSize: 16 }}
-            />
-          </Field>
+          {/* Cómo se va a ver en la lista de usuarios: el avatar con las iniciales armadas solas
+              a partir del nombre y el apellido (nunca hay un campo para escribirlas a mano). */}
+          {(nombre.trim() || apellido.trim()) && (
+            <div className="mb-5 flex items-center gap-3 rounded-[var(--radius-md)] border border-border bg-bg px-3.5 py-3">
+              <span
+                aria-hidden
+                className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-text text-[12px] font-semibold text-green"
+              >
+                {inicialesPersona(nombre, apellido)}
+              </span>
+              <div className="min-w-0 text-[12.5px] leading-[1.45]">
+                <div className="truncate font-medium text-text">{`${nombre} ${apellido}`.trim()}</div>
+                <div className="truncate text-text-2">Así te van a ver los demás</div>
+              </div>
+            </div>
+          )}
 
           <Button
             variant="primary"
@@ -227,7 +270,7 @@ export default function RegistroPage() {
               <Spinner label="Creando tu perfil…" />
             ) : (
               <>
-                Aceptar y entrar
+                Aceptar y continuar
                 <ArrowRight size={15} strokeWidth={2} />
               </>
             )}
@@ -239,6 +282,49 @@ export default function RegistroPage() {
           >
             Rechazar la invitación
           </a>
+        </>
+      )}
+
+      {estado === "invitacion" && invitacion && paso === "contrasena" && (
+        <>
+          <div className="mb-1.5 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">Crea tu contraseña</div>
+          <div className="mb-6 text-[15px] text-text-3">
+            Mínimo 10 caracteres, con mayúscula, minúscula, número y símbolo
+          </div>
+          <Field label="Contraseña">
+            <PasswordInput
+              invalid={!!errorFormulario}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Tu nueva contraseña"
+            />
+          </Field>
+          <Field label="Repite tu contraseña" error={errorFormulario ?? undefined}>
+            <PasswordInput
+              invalid={!!errorFormulario}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repite tu nueva contraseña"
+              onKeyDown={(e) => e.key === "Enter" && crearContrasenaYEntrar()}
+            />
+          </Field>
+          <Button
+            variant="primary"
+            className="w-full justify-center h-[50px] !text-[15px]"
+            onClick={crearContrasenaYEntrar}
+            disabled={enviando}
+          >
+            {enviando ? (
+              <Spinner label="Guardando…" />
+            ) : (
+              <>
+                Crear contraseña y entrar
+                <ArrowRight size={15} strokeWidth={2} />
+              </>
+            )}
+          </Button>
         </>
       )}
     </AuthShell>
