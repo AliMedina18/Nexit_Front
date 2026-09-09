@@ -1,14 +1,35 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Pencil, Trash2, UserPlus, X } from "lucide-react";
-import { Badge, Button, StatCard, Tag } from "@/components/ui/primitives";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Check, MailPlus, Pencil, Send, ShieldQuestion, Trash2, UserPlus, Users, X } from "lucide-react";
+import {
+  ActiveFilters,
+  Badge,
+  Button,
+  Dropdown,
+  EmptyState,
+  StatCard,
+  Tag,
+  type FilterChip,
+} from "@/components/ui/primitives";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { RowAction, Table, Td, Th, Thead, Tr } from "@/components/ui/Table";
+import {
+  CUENTA_ACTIVA_COLOR,
+  CUENTA_INACTIVA_COLOR,
+  ROLES,
+  ROL_COLORS,
+  ROL_LABELS,
+} from "@/lib/constants";
+import { haceCuanto, inicialesPersona } from "@/lib/format";
+import { fmtFechaHora } from "@/lib/historial";
 import { invitacionesApi } from "@/services/api/invitaciones-service";
 import { presenciaApi } from "@/services/api/presencia-service";
 import { solicitudesEliminacionApi } from "@/services/api/solicitudes-eliminacion-service";
 import { usuariosApi } from "@/services/api/usuarios-service";
 import { useAuthStore } from "@/store/auth-store";
 import { useClientesStore } from "@/store/clientes-store";
+import { usePageToolbarStore } from "@/store/page-toolbar-store";
 import { useProjectsStore } from "@/store/projects-store";
 import { useProvidersStore } from "@/store/providers-store";
 import { useUiStore } from "@/store/ui-store";
@@ -21,26 +42,100 @@ import type {
   Usuario,
   UsuarioUpdateInput,
 } from "@/types/api";
-import { InviteModal } from "./InviteModal";
+import { InvitarUsuarioModal } from "./InvitarUsuarioModal";
+import { RegistrarUsuarioModal } from "./RegistrarUsuarioModal";
+import { UsuarioDetail } from "./UsuarioDetail";
 import { UsuarioFormModal } from "./UsuarioFormModal";
 import styles from "@/styles/dashboard.module.css";
-
-const ROL_LABELS: Record<Rol, string> = {
-  super_admin: "Super admin",
-  admin: "Admin",
-  manager: "Manager",
-  miembro: "Miembro",
-};
 
 const ENTIDAD_LABELS: Record<TipoEntidadEliminable, string> = {
   cliente: "Cliente",
   proveedor: "Proveedor",
   proyecto: "Proyecto",
+  usuario: "Usuario",
 };
+
+/**
+ * Los estados de una solicitud de eliminación (Nexit_Back/docs/11, sección 9). Solo
+ * `pendiente_admin` espera una decisión de quien está mirando esta pantalla: `pendiente_gerente`
+ * espera al gerente responsable de ESE proyecto, y las otras dos ya terminaron su camino. Antes los
+ * botones de aprobar/rechazar salían en todas las filas por igual, así que en tres de los cuatro
+ * estados el clic solo servía para recibir un error del backend.
+ */
+const SOLICITUD_ESTADOS: Record<string, { label: string; bg: string; c: string }> = {
+  pendiente_gerente: { label: "Espera al gerente", bg: "#FBF0DC", c: "#7A4E00" },
+  pendiente_admin: { label: "Espera tu decisión", bg: "#E6F1FB", c: "#0C447C" },
+  aprobada: { label: "Aprobada", bg: "#E4F9EE", c: "#036B3C" },
+  rechazada: { label: "Rechazada", bg: "#FCEBEB", c: "#791F1F" },
+};
+
+// Las mismas dos palabras que la columna "Estado de la cuenta" de la tabla -- si el filtro las
+// dijera de otra forma ("con acceso" / "sin acceso"), habría que traducir mentalmente entre lo que
+// se filtra y lo que se ve.
+const ESTADOS_CUENTA = [
+  { value: "activa", label: "Activa" },
+  { value: "desactivada", label: "Desactivada" },
+];
+
+const CONEXION = [
+  { value: "en-linea", label: "En línea ahora" },
+  { value: "desconectados", label: "Fuera de línea" },
+];
+
+/** Confirmaciones abiertas -- una sola a la vez, para no montar cuatro diálogos distintos. */
+type Confirmacion =
+  | { tipo: "solicitarEliminacionUsuario"; usuario: Usuario }
+  | { tipo: "cancelarInvitacion"; invitacion: Invitacion }
+  | { tipo: "aprobarSolicitud"; solicitud: SolicitudEliminacion; nombre: string }
+  | { tipo: "rechazarSolicitud"; solicitud: SolicitudEliminacion; nombre: string };
+
+/**
+ * Encabezado de las dos secciones de abajo. Existe para que "Invitaciones pendientes" y
+ * "Solicitudes de eliminación" se lean como dos bloques hermanos con el mismo peso -- antes uno
+ * era un título con un botón al lado y el otro un texto suelto, y la pantalla parecía tres cosas
+ * distintas pegadas en vez de una.
+ */
+function SeccionHeader({
+  icon: Icon,
+  titulo,
+  descripcion,
+  conteo,
+  accion,
+}: {
+  icon: typeof Users;
+  titulo: string;
+  descripcion: string;
+  conteo?: number;
+  accion?: ReactNode;
+}) {
+  return (
+    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border bg-surface text-text-2">
+          <Icon size={15} strokeWidth={1.8} />
+        </span>
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-[15px] font-semibold leading-tight">{titulo}</h2>
+            {conteo !== undefined && conteo > 0 && (
+              <span className="rounded-[20px] bg-text px-[7px] py-[2px] font-mono text-[10px] font-medium text-green">
+                {conteo}
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 text-[12px] text-text-3">{descripcion}</div>
+        </div>
+      </div>
+      {accion}
+    </div>
+  );
+}
 
 export default function UsuariosPage() {
   const authUser = useAuthStore((s) => s.user);
   const pushToast = useUiStore((s) => s.pushToast);
+  const setToolbar = usePageToolbarStore((s) => s.setToolbar);
+  const clearToolbar = usePageToolbarStore((s) => s.clearToolbar);
   const { items: clientes, fetchAll: fetchClientes } = useClientesStore();
   const { items: providers, fetchAll: fetchProviders } = useProvidersStore();
   const { items: projects, fetchAll: fetchProjects } = useProjectsStore();
@@ -54,9 +149,22 @@ export default function UsuariosPage() {
   const [solicitudes, setSolicitudes] = useState<SolicitudEliminacion[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [inviteOpen, setInviteOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filtRol, setFiltRol] = useState("");
+  const [filtEstado, setFiltEstado] = useState("");
+  const [filtConexion, setFiltConexion] = useState("");
+  const [verInvitacionesRespondidas, setVerInvitacionesRespondidas] = useState(false);
+
+  // Dos modales distintos a propósito, no dos pestañas de uno solo: invitar es pedirle a alguien
+  // que se sume, registrar es darlo por hecho. Piden datos distintos y tienen consecuencias
+  // distintas (docs/38).
+  const [invitarOpen, setInvitarOpen] = useState(false);
+  const [registrarOpen, setRegistrarOpen] = useState(false);
   const [editing, setEditing] = useState<Usuario | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [detalle, setDetalle] = useState<Usuario | null>(null);
+  const [confirmacion, setConfirmacion] = useState<Confirmacion | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
 
   const load = useCallback(async () => {
     if (!esAdmin) {
@@ -87,38 +195,134 @@ export default function UsuariosPage() {
   }, [esAdmin, esSuperAdmin, pushToast]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load on mount (equipo/presencia/solicitudes/invitaciones)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga inicial (equipo/presencia/solicitudes/invitaciones)
     load();
     fetchClientes();
     fetchProviders();
     fetchProjects();
   }, [load, fetchClientes, fetchProviders, fetchProjects]);
 
-  const enLineaPorId = useMemo(() => Object.fromEntries(presencia.map((p) => [p.id, p.enLinea])), [presencia]);
+  // Buscador compartido de la barra superior -- mismo patrón que Clientes/Proveedores/Proyectos.
+  useEffect(() => {
+    function onGlobalSearch(event: Event) {
+      setSearch((event as CustomEvent<string>).detail);
+    }
+    window.addEventListener("nexit:search", onGlobalSearch);
+    return () => window.removeEventListener("nexit:search", onGlobalSearch);
+  }, []);
 
-  const stats = useMemo(() => {
-    const miembros = usuarios.length;
-    const conectados = presencia.filter((p) => p.enLinea).length;
-    const administradores = usuarios.filter((u) => u.rol === "admin" || u.rol === "super_admin").length;
-    const pendientes = invitaciones.filter((i) => !i.fechaRespuesta).length;
-    return { miembros, conectados, administradores, pendientes };
-  }, [usuarios, presencia, invitaciones]);
+  /**
+   * Barra superior de esta pantalla: buscador, Excel y "Nuevo usuario" -- el mismo sitio donde
+   * las otras secciones tienen su "Nuevo cliente" / "Nuevo proyecto". Importar acá NO crea
+   * usuarios: invita a los correos del archivo (Nexit_Back/docs/36), por eso los textos propios.
+   */
+  useEffect(() => {
+    setToolbar({
+      entidad: "usuarios",
+      searchPlaceholder: "Buscar por nombre, correo o rol…",
+      puedeImportar: esSuperAdmin,
+      onExport: usuariosApi.exportar,
+      onImport: invitacionesApi.importar,
+      onImported: load,
+      textos: {
+        menuImportar: "Importar usuarios",
+        menuExportar: "Exportar usuarios",
+        sinActualizados: true,
+        etiquetaCreados: (n) => (n === 1 ? "invitación enviada" : "invitaciones enviadas"),
+        toastExito: (r) => (r.creados === 1 ? "1 invitación enviada" : `${r.creados} invitaciones enviadas`),
+      },
+      // Mismo lugar que "Nuevo proyecto" o "Nuevo cliente" en las otras pantallas. Solo para
+      // super_admin: es quien puede dar de alta a alguien (docs/06).
+      ...(esSuperAdmin ? { addLabel: "Nuevo usuario", addIcon: UserPlus, onAdd: () => setRegistrarOpen(true) } : {}),
+    });
+    return clearToolbar;
+  }, [setToolbar, clearToolbar, esSuperAdmin, load]);
 
-  function entidadNombre(tipo: TipoEntidadEliminable, id: string): string {
-    if (tipo === "cliente") return clientes.find((c) => c.id === id)?.nombre ?? "(eliminado)";
-    if (tipo === "proveedor") return providers.find((p) => p.id === id)?.nombre ?? "(eliminado)";
-    return projects.find((p) => p.id === id)?.nombre ?? "(eliminado)";
+  const presenciaPorId = useMemo(() => new Map(presencia.map((p) => [p.id, p])), [presencia]);
+
+  const invitacionesPendientes = useMemo(() => invitaciones.filter((i) => i.estado === "Pendiente"), [invitaciones]);
+  const invitacionesVisibles = verInvitacionesRespondidas ? invitaciones : invitacionesPendientes;
+  const solicitudesPorDecidir = useMemo(() => solicitudes.filter((s) => s.estado === "pendiente_admin"), [solicitudes]);
+
+  const stats = useMemo(
+    () => ({
+      total: usuarios.length,
+      conectados: presencia.filter((p) => p.enLinea).length,
+      pendientes: invitacionesPendientes.length,
+    }),
+    [usuarios, presencia, invitacionesPendientes],
+  );
+
+  const usuariosVisibles = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return usuarios.filter((u) => {
+      if (filtRol && u.rol !== filtRol) return false;
+      if (filtEstado === "activa" && !u.activo) return false;
+      if (filtEstado === "desactivada" && u.activo) return false;
+      const enLinea = presenciaPorId.get(u.id)?.enLinea ?? false;
+      if (filtConexion === "en-linea" && !enLinea) return false;
+      if (filtConexion === "desconectados" && enLinea) return false;
+      if (!q) return true;
+      return (
+        `${u.nombre} ${u.apellido}`.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q) ||
+        ROL_LABELS[u.rol].toLowerCase().includes(q)
+      );
+    });
+  }, [usuarios, filtRol, filtEstado, filtConexion, search, presenciaPorId]);
+
+  const chips: FilterChip[] = [
+    search && { key: "search", label: `“${search}”` },
+    filtRol && { key: "rol", label: ROL_LABELS[filtRol as Rol] },
+    filtEstado && { key: "estado", label: ESTADOS_CUENTA.find((e) => e.value === filtEstado)?.label ?? filtEstado },
+    filtConexion && { key: "conexion", label: CONEXION.find((c) => c.value === filtConexion)?.label ?? filtConexion },
+  ].filter(Boolean) as FilterChip[];
+
+  function removeChip(key: string) {
+    if (key === "search") setSearch("");
+    if (key === "rol") setFiltRol("");
+    if (key === "estado") setFiltEstado("");
+    if (key === "conexion") setFiltConexion("");
   }
 
-  function usuarioNombre(id: string): string {
+  function clearAll() {
+    setSearch("");
+    setFiltRol("");
+    setFiltEstado("");
+    setFiltConexion("");
+  }
+
+  function entidadNombre(tipo: TipoEntidadEliminable, id: string): string {
+    if (tipo === "cliente") return clientes.find((c) => c.id === id)?.nombre ?? "(ya eliminado)";
+    if (tipo === "proveedor") return providers.find((p) => p.id === id)?.nombre ?? "(ya eliminado)";
+    if (tipo === "usuario") return usuarioNombre(id, "(ya eliminado)");
+    return projects.find((p) => p.id === id)?.nombre ?? "(ya eliminado)";
+  }
+
+  // `solicitadoPorId` puede venir en null: si esa cuenta se eliminó después, la solicitud se conserva
+  // sin dueño (Nexit_Back/docs/40) en vez de desaparecer del historial.
+  function usuarioNombre(id: string | null | undefined, siNoEsta = "—"): string {
+    if (!id) return "Usuario eliminado";
     const u = usuarios.find((x) => x.id === id);
-    return u ? `${u.nombre} ${u.apellido}` : "—";
+    return u ? `${u.nombre} ${u.apellido}`.trim() : siNoEsta;
+  }
+
+  /**
+   * Por qué NO se puede pedir la eliminación de esta cuenta, o null si sí se puede. Las dos razones
+   * las rechaza igual el backend con 403 -- acá salen antes, apagando el botón, para que nadie haga
+   * clic solo para recibir un error.
+   */
+  function motivoNoEliminable(u: Usuario): string | null {
+    if (u.id === authUser?.id) return "No puedes pedir que eliminen tu propia cuenta";
+    if (u.rol === "super_admin") return "La cuenta del super administrador no se puede eliminar";
+    return null;
   }
 
   async function handleSaveUsuario(id: string, input: UsuarioUpdateInput) {
     try {
       const updated = await usuariosApi.update(id, input);
       setUsuarios((prev) => prev.map((u) => (u.id === id ? updated : u)));
+      setDetalle((prev) => (prev?.id === id ? updated : prev));
       pushToast("Usuario actualizado", "success");
       setFormOpen(false);
       setEditing(null);
@@ -127,210 +331,392 @@ export default function UsuariosPage() {
     }
   }
 
-  async function handleDeleteUsuario(u: Usuario) {
-    if (u.id === authUser?.id) {
-      pushToast("No puedes eliminar tu propia cuenta desde aquí", "danger");
-      return;
-    }
-    if (!window.confirm(`¿Eliminar a ${u.nombre} ${u.apellido}? Esta acción no se puede deshacer.`)) return;
+  /** Una sola función para las cuatro confirmaciones -- ver el tipo Confirmacion. */
+  async function ejecutarConfirmacion(comentario: string) {
+    if (!confirmacion) return;
+    setConfirmando(true);
     try {
-      await usuariosApi.remove(u.id);
-      setUsuarios((prev) => prev.filter((x) => x.id !== u.id));
-      pushToast("Usuario eliminado", "success");
+      if (confirmacion.tipo === "solicitarEliminacionUsuario") {
+        // Nunca se borra en el acto (Alicia, 2026-09-08): se crea la solicitud, le llega la
+        // notificación a los administradores y al super administrador, y aparece abajo esperando
+        // decisión. La persona sigue en la tabla, con acceso, hasta que alguien apruebe.
+        const creada = await solicitudesEliminacionApi.create({
+          tipoEntidad: "usuario",
+          entidadId: confirmacion.usuario.id,
+          motivo: comentario || null,
+        });
+        setSolicitudes((prev) => [creada, ...prev]);
+        setDetalle(null);
+        pushToast("Solicitud enviada a los administradores", "success");
+      } else if (confirmacion.tipo === "cancelarInvitacion") {
+        await invitacionesApi.cancelar(confirmacion.invitacion.id);
+        setInvitaciones((prev) => prev.filter((x) => x.id !== confirmacion.invitacion.id));
+        pushToast("Invitación cancelada", "success");
+      } else if (confirmacion.tipo === "aprobarSolicitud") {
+        const updated = await solicitudesEliminacionApi.aprobarComoAdmin(confirmacion.solicitud.id, { comentario: comentario || null });
+        setSolicitudes((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+        pushToast("Solicitud aprobada, el registro se eliminó", "success");
+        // Si lo aprobado era una cuenta, la persona ya no está en el directorio.
+        if (confirmacion.solicitud.tipoEntidad === "usuario") {
+          setUsuarios((prev) => prev.filter((x) => x.id !== confirmacion.solicitud.entidadId));
+        }
+        fetchClientes();
+        fetchProviders();
+        fetchProjects();
+      } else {
+        const updated = await solicitudesEliminacionApi.rechazarComoAdmin(confirmacion.solicitud.id, { comentario: comentario || null });
+        setSolicitudes((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+        pushToast("Solicitud rechazada", "success");
+      }
+      setConfirmacion(null);
     } catch (err) {
-      pushToast(err instanceof Error ? err.message : "No se pudo eliminar el usuario", "danger");
-    }
-  }
-
-  async function handleAprobar(s: SolicitudEliminacion) {
-    try {
-      const updated = await solicitudesEliminacionApi.aprobarComoAdmin(s.id, {});
-      setSolicitudes((prev) => prev.map((x) => (x.id === s.id ? updated : x)));
-      pushToast("Solicitud aprobada", "success");
-    } catch (err) {
-      pushToast(err instanceof Error ? err.message : "No se pudo aprobar la solicitud", "danger");
-    }
-  }
-
-  async function handleRechazar(s: SolicitudEliminacion) {
-    const comentario = window.prompt("Comentario para quien la solicitó (opcional)");
-    try {
-      const updated = await solicitudesEliminacionApi.rechazarComoAdmin(s.id, { comentario: comentario || null });
-      setSolicitudes((prev) => prev.map((x) => (x.id === s.id ? updated : x)));
-      pushToast("Solicitud rechazada", "success");
-    } catch (err) {
-      pushToast(err instanceof Error ? err.message : "No se pudo rechazar la solicitud", "danger");
+      pushToast(err instanceof Error ? err.message : "No se pudo completar la acción", "danger");
+    } finally {
+      setConfirmando(false);
     }
   }
 
   if (!esAdmin) {
-    return (
-      <div className="flex flex-col items-center gap-2 py-20 text-center text-text-2">
-        <UserPlus size={28} strokeWidth={1.5} className="text-text-3" />
-        <div className="text-[13px]">El directorio de usuarios está disponible solo para administradores.</div>
-      </div>
-    );
+    return <EmptyState icon={Users} title="El directorio del equipo está disponible solo para administradores." />;
   }
 
   return (
     <div>
       <div className="mb-1 font-mono text-[11px] uppercase tracking-widest text-text-3">Equipo</div>
-      <h1 className={styles.h1}>Usuarios</h1>
-      <p className="mb-5 text-[13px] text-text-2">Quién tiene acceso, su rol, quién está conectado ahora, e invitaciones pendientes.</p>
+      <h1 className={styles.h1}>Gestión de usuarios</h1>
+      <p className="mb-5 text-[13px] text-text-2">
+        Registra, actualiza y da de baja las cuentas del equipo, y resuelve sus solicitudes.
+      </p>
 
-      <div className={`mb-5 ${styles.kpis}`}>
-        <StatCard n={stats.miembros} label="Miembros" />
-        <StatCard n={stats.conectados} label="Conectados ahora" />
-        <StatCard n={stats.administradores} label="Administradores" />
-        <StatCard n={stats.pendientes} label="Invitaciones pendientes" />
+      <div className={`mb-4 ${styles.kpis3}`}>
+        <StatCard n={stats.total} label="Todos los usuarios" />
+        <StatCard n={stats.conectados} label="Conectados ahora" accent="#036B3C" />
+        <StatCard n={stats.pendientes} label="Invitaciones pendientes" accent={stats.pendientes > 0 ? "#7A4E00" : undefined} />
       </div>
 
-      <div className="mb-2.5 flex items-center justify-between">
-        <h2 className="text-[15px] font-semibold">Equipo</h2>
-        {esSuperAdmin && (
-          <Button variant="primary" icon={UserPlus} onClick={() => setInviteOpen(true)}>
-            Invitar
-          </Button>
-        )}
+      <div className={`mb-4 ${styles.filtersPanel}`}>
+        <div className={styles.filterControls}>
+          <Dropdown
+            value={filtRol}
+            onChange={setFiltRol}
+            placeholder="Todos los roles"
+            options={ROLES.map((r) => ({ value: r, label: ROL_LABELS[r] }))}
+          />
+          <Dropdown value={filtEstado} onChange={setFiltEstado} placeholder="Todos los estados" options={ESTADOS_CUENTA} />
+          <Dropdown value={filtConexion} onChange={setFiltConexion} placeholder="Toda la actividad" options={CONEXION} />
+        </div>
+        <ActiveFilters chips={chips} onRemove={removeChip} onClearAll={clearAll} variant="panel" />
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-[13px] text-text-3">Cargando…</div>
+        <div className="py-14 text-center text-[13px] text-text-3">Cargando…</div>
+      ) : usuariosVisibles.length === 0 ? (
+        <EmptyState
+          icon={Users}
+          title={usuarios.length === 0 ? "Todavía no hay nadie en el equipo." : "Nadie coincide con estos filtros."}
+          action={chips.length > 0 ? { label: "Limpiar filtros", onClick: clearAll } : undefined}
+        />
       ) : (
-        <div className="mb-8 overflow-x-auto rounded-[var(--radius-lg)] border border-border bg-surface">
-          <table className="w-full border-collapse text-[13px]">
-            <thead>
-              <tr className="border-b border-border bg-gray-light text-left text-[11px] font-semibold uppercase tracking-wide text-text-3">
-                <th className="px-3.5 py-2.5">Nombre</th>
-                <th className="px-3.5 py-2.5">Rol</th>
-                <th className="px-3.5 py-2.5">Estado</th>
-                <th className="px-3.5 py-2.5" />
-              </tr>
-            </thead>
+        <div className="mb-9">
+          <Table
+            footer={
+              <span className="text-[12px] text-text-3">
+                {usuariosVisibles.length === usuarios.length
+                  ? `${usuarios.length} ${usuarios.length === 1 ? "persona" : "personas"} en el equipo`
+                  : `${usuariosVisibles.length} de ${usuarios.length}`}
+              </span>
+            }
+          >
+            <Thead>
+              <Th>Usuario</Th>
+              <Th className="text-center">Correo</Th>
+              <Th className="text-center">Rol</Th>
+              <Th className="text-center">Estado de la cuenta</Th>
+              <Th className="text-center">Acciones</Th>
+            </Thead>
             <tbody>
-              {usuarios.map((u) => {
-                const enLinea = enLineaPorId[u.id];
+              {usuariosVisibles.map((u) => {
+                const nombreCompleto = `${u.nombre} ${u.apellido}`.trim();
+                const enLinea = presenciaPorId.get(u.id)?.enLinea ?? false;
+                const esYo = u.id === authUser?.id;
+                const rolColor = ROL_COLORS[u.rol];
+                const cuentaColor = u.activo ? CUENTA_ACTIVA_COLOR : CUENTA_INACTIVA_COLOR;
+                const eliminaEl = u.fechaDesactivacion
+                  ? new Date(new Date(u.fechaDesactivacion).getTime() + 30 * 24 * 60 * 60 * 1000)
+                  : null;
                 return (
-                  <tr key={u.id} className="border-b border-border last:border-b-0 hover:bg-gray-light/60">
-                    <td className="px-3.5 py-2.5">
+                  <Tr key={u.id} onClick={() => setDetalle(u)}>
+                    <Td>
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-text text-[11px] font-semibold text-green">
-                          {u.iniciales || `${u.nombre[0] ?? ""}${u.apellido[0] ?? ""}`.toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-medium">
-                            {u.nombre} {u.apellido}
+                        <div className="relative">
+                          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-text text-[11px] font-semibold text-green">
+                            {inicialesPersona(u.nombre, u.apellido)}
                           </div>
-                          <div className="text-[11px] text-text-3">{u.email}</div>
+                          {enLinea && (
+                            <span
+                              aria-hidden
+                              title="Conectado ahora"
+                              className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-success"
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate font-medium">{nombreCompleto || "Sin nombre"}</span>
+                            {esYo && <Tag>Tú</Tag>}
+                          </div>
+                          <div className="text-[11px] text-text-3">{enLinea ? "Conectado ahora" : "Desconectado"}</div>
                         </div>
                       </div>
-                    </td>
-                    <td className="px-3.5 py-2.5">{ROL_LABELS[u.rol]}</td>
-                    <td className="px-3.5 py-2.5">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ background: enLinea ? "var(--success)" : "var(--text-3)" }}
-                        />
-                        {enLinea ? "Disponible" : "Desconectado"}
-                      </span>
-                    </td>
-                    <td className="px-3.5 py-2.5">
-                      {esSuperAdmin && (
-                        <div className="flex justify-end gap-1">
-                          <button
-                            onClick={() => {
+                    </Td>
+                    <Td className="text-center text-text-2">{u.email}</Td>
+                    <Td className="text-center">
+                      <Badge bg={rolColor.bg} color={rolColor.c}>
+                        {ROL_LABELS[u.rol]}
+                      </Badge>
+                    </Td>
+                    <Td className="text-center">
+                      <Badge bg={cuentaColor.bg} color={cuentaColor.c}>
+                        {u.activo ? "Activa" : "Desactivada"}
+                      </Badge>
+                      {!u.activo && eliminaEl && (
+                        // docs/17: a los 30 días de desactivada, el sistema la elimina sola.
+                        <div className="mt-1 text-[11px] text-text-3">
+                          se elimina el {eliminaEl.toLocaleDateString("es-CO", { day: "2-digit", month: "short" })}
+                        </div>
+                      )}
+                    </Td>
+                    <Td>
+                      <div className="flex justify-center gap-1.5">
+                        {/* Editar sigue siendo exclusivo del super_admin; pedir una eliminación no
+                            -- un administrador también puede, y de hecho es el caso normal: él la
+                            pide, y la decide quien la reciba (Nexit_Back/docs/40). */}
+                        {esSuperAdmin && (
+                          <RowAction
+                            label={esYo ? "Editar mi perfil" : `Editar a ${u.nombre}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setEditing(u);
                               setFormOpen(true);
                             }}
-                            aria-label="Editar"
-                            className="flex cursor-pointer items-center rounded border border-border bg-surface p-1.5 text-text-2 hover:bg-gray-light"
                           >
                             <Pencil size={13} strokeWidth={2} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUsuario(u)}
-                            aria-label="Eliminar"
-                            className="flex cursor-pointer items-center rounded border border-border bg-surface p-1.5 text-text-2 hover:bg-red-light hover:text-red"
+                          </RowAction>
+                        )}
+                        <span title={motivoNoEliminable(u) ?? `Pedir que se elimine a ${u.nombre}`}>
+                          <RowAction
+                            label={motivoNoEliminable(u) ?? `Pedir que se elimine a ${u.nombre}`}
+                            tone="danger"
+                            disabled={motivoNoEliminable(u) !== null}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmacion({ tipo: "solicitarEliminacionUsuario", usuario: u });
+                            }}
                           >
                             <Trash2 size={13} strokeWidth={2} />
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
+                          </RowAction>
+                        </span>
+                      </div>
+                    </Td>
+                  </Tr>
                 );
               })}
-              {usuarios.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-3.5 py-6 text-center text-text-3">
-                    Sin usuarios registrados.
-                  </td>
-                </tr>
-              )}
             </tbody>
-          </table>
+          </Table>
         </div>
       )}
 
-      <div className="mb-2.5 text-[15px] font-semibold">Solicitudes de eliminación</div>
-      <div className="overflow-x-auto rounded-[var(--radius-lg)] border border-border bg-surface">
-        <table className="w-full border-collapse text-[13px]">
-          <thead>
-            <tr className="border-b border-border bg-gray-light text-left text-[11px] font-semibold uppercase tracking-wide text-text-3">
-              <th className="px-3.5 py-2.5">Entidad</th>
-              <th className="px-3.5 py-2.5">Solicitado por</th>
-              <th className="px-3.5 py-2.5">Motivo</th>
-              <th className="px-3.5 py-2.5">Estado</th>
-              <th className="px-3.5 py-2.5" />
-            </tr>
-          </thead>
-          <tbody>
-            {solicitudes.map((s) => (
-              <tr key={s.id} className="border-b border-border last:border-b-0">
-                <td className="px-3.5 py-2.5">
-                  <Tag>{ENTIDAD_LABELS[s.tipoEntidad]}</Tag> {entidadNombre(s.tipoEntidad, s.entidadId)}
-                </td>
-                <td className="px-3.5 py-2.5">{usuarioNombre(s.solicitadoPorId)}</td>
-                <td className="max-w-[220px] truncate px-3.5 py-2.5 text-text-2">{s.motivo || "—"}</td>
-                <td className="px-3.5 py-2.5">
-                  <Badge bg="var(--gray-light)" color="var(--text-2)">
-                    {s.estado}
-                  </Badge>
-                </td>
-                <td className="px-3.5 py-2.5">
-                  <div className="flex justify-end gap-1">
-                    <button
-                      onClick={() => handleAprobar(s)}
-                      aria-label="Aprobar"
-                      title="Aprobar y eliminar"
-                      className="flex cursor-pointer items-center rounded border border-border bg-surface p-1.5 text-text-2 hover:bg-gray-light hover:text-success"
-                    >
-                      <Check size={13} strokeWidth={2} />
-                    </button>
-                    <button
-                      onClick={() => handleRechazar(s)}
-                      aria-label="Rechazar"
-                      className="flex cursor-pointer items-center rounded border border-border bg-surface p-1.5 text-text-2 hover:bg-red-light hover:text-red"
-                    >
-                      <X size={13} strokeWidth={2} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {solicitudes.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-3.5 py-6 text-center text-text-3">
-                  Sin solicitudes de eliminación.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      {/* --- Invitaciones ------------------------------------------------- */}
+      {esSuperAdmin && (
+        <div className="mb-9">
+          <SeccionHeader
+            icon={MailPlus}
+            titulo="Invitaciones pendientes"
+            descripcion="Ya recibieron el correo, pero todavía no han creado su perfil."
+            conteo={invitacionesPendientes.length}
+            accion={
+              <Button variant="primary" icon={Send} onClick={() => setInvitarOpen(true)}>
+                Invitar usuarios
+              </Button>
+            }
+          />
+
+          {invitacionesVisibles.length === 0 ? (
+            <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface px-5 py-9 text-center">
+              <MailPlus size={24} strokeWidth={1.5} className="mx-auto mb-2 text-text-3" />
+              <div className="text-[13px] text-text-2">No hay invitaciones esperando respuesta.</div>
+              <div className="mt-1 text-[12px] text-text-3">
+                Con “Invitar” puedes mandar varios correos de una vez, o subir una lista desde Excel.
+              </div>
+            </div>
+          ) : (
+            <Table
+              footer={
+                invitaciones.length > invitacionesPendientes.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setVerInvitacionesRespondidas((v) => !v)}
+                    className="cursor-pointer text-[12px] text-text-2 underline-offset-2 hover:underline"
+                  >
+                    {verInvitacionesRespondidas
+                      ? "Ver solo las que siguen pendientes"
+                      : `Ver también las ${invitaciones.length - invitacionesPendientes.length} ya respondidas`}
+                  </button>
+                ) : undefined
+              }
+            >
+              <Thead>
+                <Th>Correo invitado</Th>
+                <Th className="text-center">Rol propuesto</Th>
+                <Th className="text-center">Invitada por</Th>
+                <Th className="text-center">Enviada</Th>
+                <Th className="text-center">Acciones</Th>
+              </Thead>
+              <tbody>
+                {invitacionesVisibles.map((i) => {
+                  const rolColor = ROL_COLORS[i.rol];
+                  const pendiente = i.estado === "Pendiente";
+                  return (
+                    <Tr key={i.id}>
+                      <Td>
+                        <div className="flex items-start gap-2.5">
+                          <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-gray-light text-text-2">
+                            <MailPlus size={14} strokeWidth={1.8} />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium">{i.email}</span>
+                              {!pendiente && <Tag>{i.estado}</Tag>}
+                            </div>
+                            {i.mensaje ? (
+                              <div className="mt-0.5 truncate text-[11px] italic text-text-3">“{i.mensaje}”</div>
+                            ) : (
+                              <div className="mt-0.5 text-[11px] text-text-3">Sin mensaje</div>
+                            )}
+                          </div>
+                        </div>
+                      </Td>
+                      <Td className="text-center">
+                        <Badge bg={rolColor.bg} color={rolColor.c}>
+                          {ROL_LABELS[i.rol]}
+                        </Badge>
+                      </Td>
+                      <Td className="text-center text-text-2">{i.invitadoPorNombre ?? "—"}</Td>
+                      <Td className="text-center">
+                        <span title={fmtFechaHora(i.createdAt)} className="text-text-2">
+                          {haceCuanto(i.createdAt)}
+                        </span>
+                      </Td>
+                      <Td>
+                        <div className="flex justify-center">
+                          {pendiente ? (
+                            <RowAction
+                              label={`Cancelar la invitación a ${i.email}`}
+                              tone="danger"
+                              onClick={() => setConfirmacion({ tipo: "cancelarInvitacion", invitacion: i })}
+                            >
+                              <X size={13} strokeWidth={2} />
+                            </RowAction>
+                          ) : (
+                            <span className="text-[12px] text-text-3">
+                              {i.fechaRespuesta ? haceCuanto(i.fechaRespuesta) : "—"}
+                            </span>
+                          )}
+                        </div>
+                      </Td>
+                    </Tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </div>
+      )}
+
+      {/* --- Solicitudes de eliminación ------------------------------------ */}
+      <div>
+        <SeccionHeader
+          icon={ShieldQuestion}
+          titulo="Solicitudes de eliminación"
+          descripcion="Nada se elimina de golpe: quien quiere dar de baja un cliente, un proveedor, un proyecto o una cuenta lo pide con su motivo y aquí se decide."
+          conteo={solicitudesPorDecidir.length}
+        />
+
+        {solicitudes.length === 0 ? (
+          <div className="rounded-[var(--radius-lg)] border border-dashed border-border bg-surface px-5 py-9 text-center">
+            <ShieldQuestion size={24} strokeWidth={1.5} className="mx-auto mb-2 text-text-3" />
+            <div className="text-[13px] text-text-2">Nadie ha pedido eliminar nada.</div>
+            <div className="mt-1 text-[12px] text-text-3">
+              Aquí llegan las solicitudes de clientes, proveedores, proyectos y cuentas del equipo.
+            </div>
+          </div>
+        ) : (
+          <Table>
+            <Thead>
+              <Th>Qué se quiere eliminar</Th>
+              <Th className="text-center">Solicitado por</Th>
+              <Th className="text-center">Motivo</Th>
+              <Th className="text-center">Estado</Th>
+              <Th className="text-center">Acciones</Th>
+            </Thead>
+            <tbody>
+              {solicitudes.map((s) => {
+                const nombre = entidadNombre(s.tipoEntidad, s.entidadId);
+                const estado = SOLICITUD_ESTADOS[s.estado] ?? { label: s.estado, bg: "var(--gray-light)", c: "var(--text-2)" };
+                const meToca = s.estado === "pendiente_admin";
+                return (
+                  <Tr key={s.id}>
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        <Tag>{ENTIDAD_LABELS[s.tipoEntidad]}</Tag>
+                        <span className="font-medium">{nombre}</span>
+                      </div>
+                      <div className="mt-0.5 pl-1 text-[11px] text-text-3">Solicitado {haceCuanto(s.createdAt)}</div>
+                    </Td>
+                    <Td className="text-center text-text-2">{usuarioNombre(s.solicitadoPorId)}</Td>
+                    <Td className="max-w-[240px] truncate text-center text-text-2" >
+                      {s.motivo || <span className="text-text-3">Sin motivo</span>}
+                    </Td>
+                    <Td className="text-center">
+                      <Badge bg={estado.bg} color={estado.c}>
+                        {estado.label}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <div className="flex justify-center gap-1.5">
+                        {meToca ? (
+                          <>
+                            <RowAction
+                              label={`Aprobar y eliminar ${nombre}`}
+                              onClick={() => setConfirmacion({ tipo: "aprobarSolicitud", solicitud: s, nombre })}
+                            >
+                              <Check size={13} strokeWidth={2} />
+                            </RowAction>
+                            <RowAction
+                              label={`Rechazar la solicitud sobre ${nombre}`}
+                              tone="danger"
+                              onClick={() => setConfirmacion({ tipo: "rechazarSolicitud", solicitud: s, nombre })}
+                            >
+                              <X size={13} strokeWidth={2} />
+                            </RowAction>
+                          </>
+                        ) : (
+                          <span className="text-[12px] text-text-3">
+                            {s.estado === "pendiente_gerente" ? "Le toca al gerente" : "Ya se decidió"}
+                          </span>
+                        )}
+                      </div>
+                    </Td>
+                  </Tr>
+                );
+              })}
+            </tbody>
+          </Table>
+        )}
       </div>
 
-      <InviteModal open={inviteOpen} onClose={() => setInviteOpen(false)} onInvited={load} />
+      <InvitarUsuarioModal open={invitarOpen} onClose={() => setInvitarOpen(false)} onInvitado={load} />
+      <RegistrarUsuarioModal open={registrarOpen} onClose={() => setRegistrarOpen(false)} onRegistrado={load} />
       <UsuarioFormModal
         open={formOpen}
         onClose={() => {
@@ -339,7 +725,92 @@ export default function UsuariosPage() {
         }}
         onSave={handleSaveUsuario}
         editing={editing}
+        esMiPropiaCuenta={editing?.id === authUser?.id}
+        enLinea={editing ? (presenciaPorId.get(editing.id)?.enLinea ?? false) : false}
       />
+      <UsuarioDetail
+        usuario={detalle}
+        presencia={detalle ? presenciaPorId.get(detalle.id) : undefined}
+        esSuperAdmin={esSuperAdmin}
+        esMiPropiaCuenta={detalle?.id === authUser?.id}
+        motivoNoEliminable={detalle ? motivoNoEliminable(detalle) : null}
+        onClose={() => setDetalle(null)}
+        onEdit={() => {
+          setEditing(detalle);
+          setFormOpen(true);
+        }}
+        onDelete={() => detalle && setConfirmacion({ tipo: "solicitarEliminacionUsuario", usuario: detalle })}
+      />
+
+      <ConfirmDialog
+        open={confirmacion !== null}
+        loading={confirmando}
+        onClose={() => setConfirmacion(null)}
+        onConfirm={ejecutarConfirmacion}
+        title={
+          confirmacion?.tipo === "solicitarEliminacionUsuario"
+            ? "Pedir que se elimine esta cuenta"
+            : confirmacion?.tipo === "cancelarInvitacion"
+              ? "Cancelar la invitación"
+              : confirmacion?.tipo === "aprobarSolicitud"
+                ? "Aprobar y eliminar"
+                : "Rechazar la solicitud"
+        }
+        confirmLabel={
+          confirmacion?.tipo === "solicitarEliminacionUsuario"
+            ? "Enviar solicitud"
+            : confirmacion?.tipo === "cancelarInvitacion"
+              ? "Sí, cancelar"
+              : confirmacion?.tipo === "aprobarSolicitud"
+                ? "Sí, eliminar"
+                : "Sí, rechazar"
+        }
+        tone={confirmacion?.tipo === "rechazarSolicitud" || confirmacion?.tipo === "solicitarEliminacionUsuario" ? "neutral" : "danger"}
+        comentario={
+          confirmacion?.tipo === "solicitarEliminacionUsuario"
+            ? "Motivo"
+            : confirmacion?.tipo === "aprobarSolicitud" || confirmacion?.tipo === "rechazarSolicitud"
+              ? "Comentario para quien la solicitó (opcional)"
+              : undefined
+        }
+        comentarioRequerido={confirmacion?.tipo === "solicitarEliminacionUsuario"}
+      >
+        {confirmacion?.tipo === "solicitarEliminacionUsuario" && (
+          <>
+            Un administrador revisa la solicitud y decide si la cuenta de{" "}
+            <strong className="text-text">{`${confirmacion.usuario.nombre} ${confirmacion.usuario.apellido}`.trim()}</strong>{" "}
+            se elimina o no. Te llega una notificación con la respuesta.
+            <div className="mt-2 text-text-3">
+              Para quitarle el acceso ya mismo sin esperar, edítala y desmarca “Cuenta activa”.
+            </div>
+          </>
+        )}
+        {confirmacion?.tipo === "cancelarInvitacion" && (
+          <>
+            La invitación a <strong className="text-text">{confirmacion.invitacion.email}</strong> deja de existir. Si ya recibió
+            el correo y hace clic en el enlace, entrará sin perfil y el sistema le dirá que no tiene acceso.
+            <div className="mt-2 text-text-3">Después de cancelarla puedes volver a invitar ese mismo correo.</div>
+          </>
+        )}
+        {confirmacion?.tipo === "aprobarSolicitud" && (
+          <>
+            Se elimina <strong className="text-text">{confirmacion.nombre}</strong> del sistema, de verdad y sin vuelta atrás.
+            Es la decisión final: aprobar esta solicitud ejecuta el borrado.
+            {confirmacion.solicitud.tipoEntidad === "usuario" && (
+              <div className="mt-2 text-text-3">
+                Al ser una cuenta, también se borra de Supabase y pierde el acceso de inmediato. Queda un respaldo
+                interno de quién era.
+              </div>
+            )}
+          </>
+        )}
+        {confirmacion?.tipo === "rechazarSolicitud" && (
+          <>
+            <strong className="text-text">{confirmacion.nombre}</strong> no se elimina y la solicitud queda cerrada. Quien la
+            pidió tendrá que volver a solicitarlo si hace falta.
+          </>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }

@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { Bell } from "lucide-react";
+import { Bell, BellOff, CheckCheck, ShieldQuestion, UserPlus, UserX } from "lucide-react";
+import { haceCuanto } from "@/lib/format";
+import { fmtFechaHora } from "@/lib/historial";
 import { notificacionesApi } from "@/services/api/notificaciones-service";
 import type { Notificacion } from "@/types/api";
 
@@ -17,15 +19,29 @@ const RUTA_POR_ENTIDAD: Record<string, string> = {
 };
 
 /**
- * Campana de notificaciones del topbar -- ported 2026-09-03 del panel del mockup aprobado
- * (borde negro, encabezado simple, filas separadas por línea, "No hay nada pendiente por
- * ahora."). El mockup agrupa ahí "Solicitudes de eliminación" y "A quién atender primero",
- * pero esas son vistas sintéticas del propio prototipo (recalculadas en el cliente sobre sus
- * datos de ejemplo) -- el backend real ya tiene su propio NotificacionesController con una
- * bandeja genérica (tipo/título/mensaje), así que se respeta esa fuente real en vez de
- * inventar la categorización de dos secciones sin saber si el `tipo` del backend distingue
- * eso. Si `tipoEntidad`+`entidadId` vienen en la notificación, el clic navega a la pantalla
- * de esa entidad (dato real, no estaba antes).
+ * Ícono y color por tipo de notificación. De un vistazo se distingue "alguien quiere borrar algo"
+ * de "alguien entró al equipo", sin tener que leer el título entero -- que es de lo que sirve un
+ * panel de notificaciones frente a una lista de textos.
+ */
+const ESTILO_POR_TIPO: Record<string, { icon: typeof Bell; bg: string; c: string }> = {
+  solicitud_eliminacion_creada: { icon: ShieldQuestion, bg: "#FBF0DC", c: "#7A4E00" },
+  solicitud_eliminacion_endosada: { icon: ShieldQuestion, bg: "#E6F1FB", c: "#0C447C" },
+  solicitud_eliminacion_decidida: { icon: ShieldQuestion, bg: "#F1EFE8", c: "#444441" },
+  invitacion_aceptada: { icon: UserPlus, bg: "#E4F9EE", c: "#036B3C" },
+  invitacion_rechazada: { icon: UserX, bg: "#FCEBEB", c: "#791F1F" },
+};
+const ESTILO_POR_DEFECTO = { icon: Bell, bg: "var(--gray-light)", c: "var(--text-2)" };
+
+/**
+ * Campana de notificaciones del topbar. La bandeja es la del backend real
+ * (`NotificacionesController`, bandeja propia genérica de tipo/título/mensaje).
+ *
+ * Rediseñado 2026-09-08 sobre el panel original del mockup, que era una lista plana de
+ * título+mensaje: ahora cada fila trae su ícono por tipo y cuánto hace que llegó, las no leídas se
+ * separan de las anteriores en dos grupos, y hay "marcar todas" -- lo que uno espera de un panel de
+ * notificaciones y lo que hace la diferencia entre revisarlo y ignorarlo. Marcar todas se hace fila
+ * por fila contra `marcar-leida` porque el backend no tiene un endpoint para el lote; con el volumen
+ * real de la bandeja (decenas, no miles) no se nota.
  */
 export function NotificationsBell() {
   const router = useRouter();
@@ -55,11 +71,19 @@ export function NotificationsBell() {
     function onClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
-  const unread = items.filter((n) => !n.leida).length;
+  const noLeidas = items.filter((n) => !n.leida);
+  const leidas = items.filter((n) => n.leida);
 
   async function markRead(n: Notificacion) {
     if (!n.leida) {
@@ -75,20 +99,68 @@ export function NotificationsBell() {
     if (ruta) router.push(n.tipoEntidad === "proyecto" && n.entidadId ? `${ruta}?open=${n.entidadId}` : ruta);
   }
 
+  async function markAllRead() {
+    const pendientes = items.filter((n) => !n.leida);
+    if (pendientes.length === 0) return;
+    setItems((prev) => prev.map((x) => ({ ...x, leida: true })));
+    // Si alguna falla, se recarga la bandeja de verdad en vez de adivinar cuáles quedaron.
+    const resultados = await Promise.allSettled(pendientes.map((n) => notificacionesApi.marcarLeida(n.id)));
+    if (resultados.some((r) => r.status === "rejected")) {
+      notificacionesApi.misNotificaciones().then(setItems).catch(() => {});
+    }
+  }
+
+  function fila(n: Notificacion) {
+    const estilo = ESTILO_POR_TIPO[n.tipo] ?? ESTILO_POR_DEFECTO;
+    const Icon = estilo.icon;
+    return (
+      <button
+        key={n.id}
+        type="button"
+        role="menuitem"
+        onClick={() => markRead(n)}
+        className={clsx(
+          "flex w-full gap-3 border-b border-[#EFEDE7] px-3.5 py-3 text-left transition-colors last:border-b-0 hover:bg-[#F4F3EF]",
+          !n.leida && "bg-[#FBFAF7]",
+        )}
+      >
+        <span
+          aria-hidden
+          className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full"
+          style={{ background: estilo.bg, color: estilo.c }}
+        >
+          <Icon size={15} strokeWidth={1.9} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-start gap-1.5">
+            <span className={clsx("flex-1 text-[13px] leading-snug", n.leida ? "font-medium text-text-2" : "font-semibold text-text")}>
+              {n.titulo}
+            </span>
+            {!n.leida && <span aria-hidden className="mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-green" />}
+          </span>
+          <span className="mt-0.5 block text-[12px] leading-snug text-text-2">{n.mensaje}</span>
+          <span className="mt-1 block font-mono text-[10.5px] text-text-3" title={fmtFechaHora(n.fechaCreacion)}>
+            {haceCuanto(n.fechaCreacion)}
+          </span>
+        </span>
+      </button>
+    );
+  }
+
   return (
     <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Notificaciones"
+        aria-label={noLeidas.length > 0 ? `Notificaciones, ${noLeidas.length} sin leer` : "Notificaciones"}
         aria-haspopup="menu"
         aria-expanded={open}
         className="relative flex h-[38px] w-[38px] flex-shrink-0 items-center justify-center rounded-[var(--radius-lg)] border border-border bg-transparent text-text transition-colors hover:bg-gray-light"
       >
         <Bell size={17} strokeWidth={1.8} />
-        {unread > 0 && (
+        {noLeidas.length > 0 && (
           <span className="absolute -right-1.5 -top-1.5 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-red px-1 text-[10px] font-semibold leading-none text-white">
-            {unread > 9 ? "9+" : unread}
+            {noLeidas.length > 9 ? "9+" : noLeidas.length}
           </span>
         )}
       </button>
@@ -96,33 +168,61 @@ export function NotificationsBell() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-40 mt-1.5 max-h-[70vh] w-[340px] overflow-y-auto rounded-[var(--radius-lg)] border border-text bg-surface shadow-[0_16px_44px_rgba(12,12,12,0.18)]"
+          className="absolute right-0 z-40 mt-1.5 flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-[var(--radius-lg)] border border-text bg-surface shadow-[0_16px_44px_rgba(12,12,12,0.18)]"
         >
-          <div className="border-b border-border px-4 py-3 text-[13px] font-semibold">Notificaciones</div>
-          {loading ? (
-            <div className="px-3.5 py-6 text-center text-[13px] text-text-3">Cargando…</div>
-          ) : items.length === 0 ? (
-            <div className="px-3.5 py-6 text-center text-[13px] text-text-3">No hay nada pendiente por ahora.</div>
-          ) : (
-            items.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                role="menuitem"
-                onClick={() => markRead(n)}
-                className={clsx(
-                  "flex w-full flex-col gap-0.5 border-b border-[#EFEDE7] px-3.5 py-2.5 text-left transition-colors last:border-b-0 hover:bg-[#F4F3EF]",
-                  !n.leida && "bg-teal-light/50",
-                )}
-              >
-                <span className="flex items-center gap-1.5 text-[13px] font-medium text-text">
-                  {!n.leida && <span aria-hidden className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-green" />}
-                  {n.titulo}
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-semibold">Notificaciones</span>
+              {noLeidas.length > 0 && (
+                <span className="rounded-[20px] bg-text px-[7px] py-[2px] font-mono text-[10px] font-medium text-green">
+                  {noLeidas.length}
                 </span>
-                <span className="text-[12px] leading-snug text-text-2">{n.mensaje}</span>
+              )}
+            </div>
+            {noLeidas.length > 0 && (
+              <button
+                type="button"
+                onClick={markAllRead}
+                className="inline-flex cursor-pointer items-center gap-1.5 text-[12px] text-text-2 transition-colors hover:text-text"
+              >
+                <CheckCheck size={13} strokeWidth={2} />
+                Marcar todas
               </button>
-            ))
-          )}
+            )}
+          </div>
+
+          <div className="overflow-y-auto">
+            {loading ? (
+              <div className="px-3.5 py-8 text-center text-[13px] text-text-3">Cargando…</div>
+            ) : items.length === 0 ? (
+              <div className="px-3.5 py-10 text-center">
+                <BellOff size={24} strokeWidth={1.5} className="mx-auto mb-2 text-text-3" />
+                <div className="text-[13px] text-text-2">No hay nada pendiente por ahora.</div>
+                <div className="mt-1 px-4 text-[12px] leading-snug text-text-3">
+                  Aquí llegan las solicitudes de eliminación y las respuestas a tus invitaciones.
+                </div>
+              </div>
+            ) : (
+              <>
+                {noLeidas.length > 0 && (
+                  <>
+                    <div className="bg-bg px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-text-3">
+                      Nuevas
+                    </div>
+                    {noLeidas.map(fila)}
+                  </>
+                )}
+                {leidas.length > 0 && (
+                  <>
+                    <div className="bg-bg px-3.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-text-3">
+                      Anteriores
+                    </div>
+                    {leidas.map(fila)}
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -17,9 +17,19 @@
   max-width: 100vw;
 }
 
+/* Variante "agrandada" del detalle (Alicia 2026-09-08): con historial,
+   adjuntos y todos los datos guardados, 520px se sentía corto para revisar
+   sin scroll constante. 900px dobla el aire sin llegar a sentirse como un
+   formulario de dos columnas (eso ya lo cubre .panel). */
+.panelDetailWide {
+  width: 900px;
+  max-width: 100vw;
+}
+
 @media (max-width: 1000px) {
   .panel,
-  .panelDetail {
+  .panelDetail,
+  .panelDetailWide {
     width: 100vw;
   }
 }
@@ -29,19 +39,23 @@
    (globals.css usa --border-strong, gris claro) para que se note al primer
    vistazo que se está dentro del drawer, no en el fondo. */
 .panel,
-.panelDetail {
+.panelDetail,
+.panelDetailWide {
   scrollbar-color: var(--text-3) var(--gray-light);
 }
 .panel::-webkit-scrollbar,
-.panelDetail::-webkit-scrollbar {
+.panelDetail::-webkit-scrollbar,
+.panelDetailWide::-webkit-scrollbar {
   width: 10px;
 }
 .panel::-webkit-scrollbar-track,
-.panelDetail::-webkit-scrollbar-track {
+.panelDetail::-webkit-scrollbar-track,
+.panelDetailWide::-webkit-scrollbar-track {
   background: var(--gray-light);
 }
 .panel::-webkit-scrollbar-thumb,
-.panelDetail::-webkit-scrollbar-thumb {
+.panelDetail::-webkit-scrollbar-thumb,
+.panelDetailWide::-webkit-scrollbar-thumb {
   background: var(--text-3);
   border-radius: 20px;
   border: 2px solid var(--gray-light);

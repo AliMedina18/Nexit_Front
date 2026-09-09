@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Drawer, FormDrawerBody, FormDrawerFooter, FormDrawerHeader, FormDrawerSection } from "@/components/ui/Drawer";
 import { DeleteOrRequestButton } from "@/components/ui/DeleteAction";
@@ -8,6 +8,7 @@ import { EntityAttachments } from "@/components/ui/EntityAttachments";
 import { Dropdown, type DropdownGroup } from "@/components/ui/primitives";
 import { Field, Input, Row, Textarea } from "@/components/ui/form";
 import { parseCSVFirstRow } from "@/lib/csv";
+import { clearFormDraft, readFormDraft, useFormDraftAutosave } from "@/lib/use-form-draft";
 import { useAuthStore } from "@/store/auth-store";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useClientesStore } from "@/store/clientes-store";
@@ -102,6 +103,7 @@ export function ProjectFormModal({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [gerentes, setGerentes] = useState<Usuario[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const panelRef = useRef<HTMLDivElement>(null);
   const [miembroRolDraft, setMiembroRolDraft] = useState("");
   const [miembroNombreDraft, setMiembroNombreDraft] = useState("");
 
@@ -116,40 +118,67 @@ export function ProjectFormModal({
     }
   }, [open, fetchBase, fetchClientes, puedeAsignarGerente]);
 
+  // Autoguardado (Alicia 2026-09-07): una key por proyecto (o "nuevo" para
+  // el formulario en blanco) -- así el borrador de uno no se mezcla con el
+  // de otro. Incluye los proveedores seleccionados (`selectedIds`), no solo
+  // los campos de texto -- si no, reabrir un borrador los mostraría vacíos.
+  const draftKey = editing ? `proyecto:${editing.id}` : "proyecto:nuevo";
+
   useEffect(() => {
     if (!open) return;
-    if (editing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the form to match whichever proyecto was opened for editing
-      setForm({
-        nombre: editing.nombre,
-        clienteId: editing.clienteId ?? "",
-        contactoProyecto: editing.contactoProyecto ?? "",
-        tipoProyecto: editing.tipoProyecto ?? "",
-        prioridad: editing.prioridad ?? "",
-        ciudad: editing.ciudad ?? "",
-        sedeNext: editing.sedeNext ?? "",
-        fechaSolicitud: editing.fechaSolicitud?.slice(0, 10) ?? "",
-        fechaEvento: editing.fechaEvento?.slice(0, 10) ?? "",
-        estadoId: editing.estadoId,
-        porcentajeAvance: editing.porcentajeAvance,
-        estadoBrief: editing.estadoBrief,
-        propuestaEstado: editing.propuestaEstado,
-        numeroFactura: editing.numeroFactura ?? "",
-        pagado: editing.pagado,
-        fechaPago: editing.fechaPago?.slice(0, 10) ?? "",
-        notas: editing.notas ?? "",
-        gerenteId: editing.gerenteId ?? "",
-        equipo: editing.equipo,
-      });
-      setSelectedIds(new Set(editing.proveedorIds));
+    const base: FormState = editing
+      ? {
+          nombre: editing.nombre,
+          clienteId: editing.clienteId ?? "",
+          contactoProyecto: editing.contactoProyecto ?? "",
+          tipoProyecto: editing.tipoProyecto ?? "",
+          prioridad: editing.prioridad ?? "",
+          ciudad: editing.ciudad ?? "",
+          sedeNext: editing.sedeNext ?? "",
+          fechaSolicitud: editing.fechaSolicitud?.slice(0, 10) ?? "",
+          fechaEvento: editing.fechaEvento?.slice(0, 10) ?? "",
+          estadoId: editing.estadoId,
+          porcentajeAvance: editing.porcentajeAvance,
+          estadoBrief: editing.estadoBrief,
+          propuestaEstado: editing.propuestaEstado,
+          numeroFactura: editing.numeroFactura ?? "",
+          pagado: editing.pagado,
+          fechaPago: editing.fechaPago?.slice(0, 10) ?? "",
+          notas: editing.notas ?? "",
+          gerenteId: editing.gerenteId ?? "",
+          equipo: editing.equipo,
+        }
+      : emptyForm;
+    const baseProveedorIds = editing ? editing.proveedorIds : [];
+    // Si hay un borrador guardado (se cerró el formulario sin guardar la
+    // última vez) y es distinto de los datos ya guardados, se restaura en
+    // vez del formulario en blanco/original.
+    const draft = readFormDraft<{ form: FormState; proveedorIds: string[] }>(draftKey);
+    if (
+      draft &&
+      (JSON.stringify(draft.form) !== JSON.stringify(base) ||
+        JSON.stringify([...draft.proveedorIds].sort()) !== JSON.stringify([...baseProveedorIds].sort()))
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restaurando un borrador guardado, no una sincronización derivable sin efecto
+      setForm(draft.form);
+      setSelectedIds(new Set(draft.proveedorIds));
+      pushToast("Recuperamos un borrador sin guardar de este formulario.", "info");
     } else {
-      setForm(emptyForm);
-      setSelectedIds(new Set());
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the form to match whichever proyecto was opened for editing
+      setForm(base);
+      setSelectedIds(new Set(baseProveedorIds));
     }
     setErrors({});
     setMiembroRolDraft("");
     setMiembroNombreDraft("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draftKey se deriva de `editing`, y pushToast es estable
   }, [open, editing]);
+
+  useFormDraftAutosave(
+    open ? draftKey : null,
+    useMemo(() => ({ form, proveedorIds: [...selectedIds] }), [form, selectedIds]),
+    open,
+  );
 
   const estadosPorFase = useMemo(() => {
     const fases = [...fasesProyecto].sort((a, b) => a.fase - b.fase);
@@ -247,7 +276,11 @@ export function ProjectFormModal({
     if (!form.estadoId) nextErrors.estadoId = "Selecciona el estado";
     if (form.pagado && !form.fechaPago) nextErrors.fechaPago = "La fecha de pago es requerida cuando el proyecto está pagado";
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      pushToast(`Falta completar: ${Object.values(nextErrors).join(" · ")}`, "danger");
+      panelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
     const input: ProyectoInput = {
       nombre: form.nombre.trim(),
@@ -276,11 +309,12 @@ export function ProjectFormModal({
       equipo: form.equipo.filter((m) => m.nombre.trim()),
       proveedorIds: [...selectedIds],
     };
+    clearFormDraft(draftKey);
     onSave(input);
   }
 
   return (
-    <Drawer open={open} onClose={onClose}>
+    <Drawer open={open} onClose={onClose} panelRef={panelRef}>
       <FormDrawerHeader
         eyebrow={editing ? "Editar proyecto" : "Registrar proyecto"}
         title={editing ? editing.nombre || "Datos del proyecto" : "Datos del nuevo proyecto"}

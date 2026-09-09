@@ -22,6 +22,8 @@ import { CLIENTE_ESTADOS, CLIENT_STATUS_COLORS, statusColor } from "@/lib/consta
 import { useAuthStore } from "@/store/auth-store";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useClientesStore } from "@/store/clientes-store";
+import { readFilterState, writeFilterState } from "@/lib/use-filter-state";
+import { useGridColumns } from "@/lib/use-grid-columns";
 import { useProjectsStore } from "@/store/projects-store";
 import { usePageToolbarStore } from "@/store/page-toolbar-store";
 import { useUiStore } from "@/store/ui-store";
@@ -65,12 +67,47 @@ export default function ClientesPage() {
   const [filtSector, setFiltSector] = useState("");
   const [filtEstado, setFiltEstado] = useState("");
   const [view, setView] = useState<"cards" | "table">("cards");
+  // Columnas de la grilla de tarjetas calculadas para llenar el ancho
+  // disponible sin franja vacía, con o sin el riel expandido (Alicia
+  // 2026-09-08) -- ver use-grid-columns.ts.
+  const { ref: cardsGridRef, columns: cardsGridColumns } = useGridColumns();
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Cliente | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  // Autoguardado de filtros (Alicia 2026-09-07): restaura lo que había
+  // quedado filtrado/buscado la última vez en esta pantalla, en esta misma
+  // sesión del navegador (ver src/lib/use-filter-state.ts).
+  useEffect(() => {
+    const saved = readFilterState<{
+      search: string;
+      filtSector: string;
+      filtEstado: string;
+      view: "cards" | "table";
+    }>("clientes");
+    if (!saved) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restaura filtros guardados una sola vez al montar, no es un ciclo de sincronizacion
+    if (saved.search !== undefined) setSearch(saved.search);
+    if (saved.filtSector !== undefined) setFiltSector(saved.filtSector);
+    if (saved.filtEstado !== undefined) setFiltEstado(saved.filtEstado);
+    // Alicia 2026-09-08: NO restauramos `view` (Tarjetas/Tabla) desde la sesion
+    // guardada. Esto era la causa real de "me aparece una tarjeta supergrande":
+    // cada pantalla (Clientes/Proveedores/Proyectos) recordaba su propia vista
+    // por separado en sessionStorage, asi que si en algun momento quedaba en
+    // "Tabla" en una pantalla y en "Tarjetas" en otra, al entrar se veian
+    // distintas entre si -- y las filas de la vista Tabla (una por fila, ancho
+    // completo) se confundian con una tarjeta gigante rota. Los demas filtros
+    // (busqueda, estado, etc.) SI se siguen restaurando; la vista simplemente
+    // siempre arranca en "Tarjetas" para que las tres pantallas se vean iguales.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo debe correr una vez, al montar
+  }, []);
+
+  useEffect(() => {
+    writeFilterState("clientes", { search, filtSector, filtEstado, view });
+  }, [search, filtSector, filtEstado, view]);
 
   useEffect(() => {
     function onGlobalSearch(event: Event) {
@@ -260,7 +297,7 @@ export default function ClientesPage() {
              mucho espacio muerto al lado cuando había pocos resultados. */}
           <div className="border-b border-border pb-3">{paginationBar}</div>
           {view === "cards" ? (
-            <div className={styles.cardsGrid}>
+            <div ref={cardsGridRef} className={styles.cardsGrid} style={{ gridTemplateColumns: `repeat(${cardsGridColumns}, minmax(0, 1fr))` }}>
               {pageRows.map((c) => (
                 <ClienteCard
                   key={c.id}
@@ -355,6 +392,11 @@ export default function ClientesPage() {
         proyectos={proyectos}
         onClose={() => setDetailId(null)}
         onEdit={() => {
+          // Antes se quedaban el detalle Y el formulario abiertos a la vez (dos
+          // drawers montados, ver Drawer.tsx) -- Alicia pidió que "Editar" desde
+          // el detalle lleve derecho al formulario, sin tener que cerrar el
+          // detalle a mano primero. Cerrarlo aquí logra eso en un solo clic.
+          setDetailId(null);
           setEditing(detailCliente);
           setFormOpen(true);
         }}

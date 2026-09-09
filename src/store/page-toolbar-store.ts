@@ -1,6 +1,8 @@
 "use client";
 
+import type { LucideIcon } from "lucide-react";
 import { create } from "zustand";
+import type { ImportExportTextos } from "@/components/ui/ImportExportBar";
 import type { ImportarResultado } from "@/types/api";
 
 /**
@@ -23,9 +25,18 @@ export interface PageToolbarConfig {
   onExport: () => Promise<{ blob: Blob; fileName: string }>;
   onImport: (archivo: File) => Promise<ImportarResultado>;
   onImported: () => void;
-  /** Texto del botón negro, p. ej. "Nuevo cliente". */
-  addLabel: string;
-  onAdd: () => void;
+  /** Solo si esta sección necesita cambiar los textos de la barra de Excel -- ver ImportExportBar. */
+  textos?: ImportExportTextos;
+  /**
+   * Texto del botón negro, p. ej. "Nuevo cliente". Opcional desde 2026-09-08: Usuarios usa la barra
+   * de Excel pero su acción principal ("Invitar") no vive arriba sino en el encabezado de la sección
+   * de invitaciones pendientes, que es donde tiene sentido (Alicia: "el botón invitar arriba de
+   * invitaciones pendientes"). Sin `addLabel`/`onAdd`, la barra superior solo muestra Excel.
+   */
+  addLabel?: string;
+  /** Ícono del botón negro. Sin esto usa el "+" de siempre; Usuarios pasa uno de persona. */
+  addIcon?: LucideIcon;
+  onAdd?: () => void;
 }
 
 interface PageToolbarState {

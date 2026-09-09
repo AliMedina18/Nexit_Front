@@ -32,11 +32,34 @@ export interface AuthUser {
   rol: Rol;
 }
 
+/**
+ * Si la cuenta autenticada en Supabase Auth tiene o no un perfil de negocio en `usuarios`.
+ * Es una pregunta distinta de "¿hay sesión?": alguien recién invitado tiene sesión válida y
+ * ningún perfil, y hasta que lo cree no puede usar el sistema (Nexit_Back lo bloquea de verdad
+ * con PerfilRequeridoFilter -- esto es lo que permite mandarlo a /registro en vez de dejarlo
+ * chocar contra 403 en cada pantalla).
+ *
+ *  - "cargando": todavía no se sabe (no bloquea nada, pero tampoco deja entrar).
+ *  - "completo": tiene perfil y está activa -- uso normal.
+ *  - "sin-perfil": autenticada pero sin fila en `usuarios` -- va a /registro.
+ *  - "inactivo": tiene perfil pero fue desactivada -- se le cierra la sesión.
+ *  - "indeterminado": no se pudo averiguar (backend caído, sin red). NO se le cierra la puerta
+ *    por esto: se le deja pasar y que fallen las llamadas de datos con su propio error visible,
+ *    en vez de mandar a todo el equipo a /registro por una caída del backend.
+ */
+export type EstadoPerfil = "cargando" | "completo" | "sin-perfil" | "inactivo" | "indeterminado";
+
 interface AuthState {
   user: AuthUser | null;
   hydrated: boolean;
+  estadoPerfil: EstadoPerfil;
   /** scope "local" (recomendado, docs/10 sección 2.3): solo cierra esta sesión/dispositivo. */
   logout: () => Promise<void>;
+  /**
+   * Vuelve a pedir GET /api/usuarios/me. La usa /registro justo después de aceptar la
+   * invitación, cuando el perfil acaba de existir pero este store todavía cree que no.
+   */
+  recargarPerfil: () => Promise<void>;
 }
 
 function buildDisplayName(email: string): { displayName: string; initials: string } {
@@ -98,13 +121,22 @@ async function refreshProfile(set: (partial: Partial<AuthState>) => void) {
         initials,
         rol: perfil.rol,
       },
+      estadoPerfil: perfil.activo ? "completo" : "inactivo",
     });
   } catch (error) {
+    if (requestId !== profileRequestId) return;
+    // 404 = la cuenta existe en Supabase Auth pero todavía no tiene perfil en Nexit: no es un
+    // error, es exactamente el caso de alguien recién invitado que aún no se ha registrado.
+    if (error instanceof ApiError && error.statusCode === 404) {
+      set({ estadoPerfil: "sin-perfil" });
+      return;
+    }
     if (!(error instanceof ApiError)) {
       console.error("No se pudo cargar /api/usuarios/me", error);
     }
-    // 404 (sin fila de negocio todavía) u otro error de red: nos quedamos con la
-    // aproximación derivada del correo que ya puso buildUserFromSession.
+    // Cualquier otra cosa (backend caído, sin red, 500): no se sabe, y se deja pasar --
+    // ver el comentario de EstadoPerfil sobre por qué no se cierra la puerta acá.
+    set({ estadoPerfil: "indeterminado" });
   }
 }
 
@@ -116,7 +148,11 @@ async function refreshProfile(set: (partial: Partial<AuthState>) => void) {
 export const useAuthStore = create<AuthState>((set) => {
   const handleSession = (session: Session | null) => {
     profileRequestId++;
-    set({ user: buildUserFromSession(session), hydrated: true });
+    set({
+      user: buildUserFromSession(session),
+      hydrated: true,
+      estadoPerfil: session ? "cargando" : "indeterminado",
+    });
     if (session) void refreshProfile(set);
   };
 
@@ -126,10 +162,16 @@ export const useAuthStore = create<AuthState>((set) => {
   return {
     user: null,
     hydrated: false,
+    estadoPerfil: "cargando",
     logout: async () => {
       profileRequestId++; // invalida cualquier /me en vuelo antes de que termine de cerrar sesión
       await supabase.auth.signOut({ scope: "local" });
-      set({ user: null });
+      set({ user: null, estadoPerfil: "indeterminado" });
+    },
+    recargarPerfil: async () => {
+      profileRequestId++;
+      set({ estadoPerfil: "cargando" });
+      await refreshProfile(set);
     },
   };
 });

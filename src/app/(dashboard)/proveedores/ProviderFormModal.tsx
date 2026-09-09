@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Drawer, FormDrawerBody, FormDrawerFooter, FormDrawerHeader, FormDrawerSection } from "@/components/ui/Drawer";
 import { Dropdown } from "@/components/ui/primitives";
@@ -10,6 +10,7 @@ import { Field, Input, Row, Textarea } from "@/components/ui/form";
 import { StarRatingInput } from "@/components/ui/StarRating";
 import { PROVEEDOR_ESTADOS } from "@/lib/constants";
 import { parseCSVFirstRow } from "@/lib/csv";
+import { clearFormDraft, readFormDraft, useFormDraftAutosave } from "@/lib/use-form-draft";
 import { proveedorAdjuntosApi } from "@/services/api/proveedor-adjuntos-service";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useUiStore } from "@/store/ui-store";
@@ -86,11 +87,13 @@ export function ProviderFormModal({
   onDelete?: () => void;
   editing: Proveedor | null;
 }) {
-  const { paises, categoriasProveedor, servicios, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } =
+  const { paises, categoriasProveedor, servicios, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades, addServicio } =
     useCatalogosStore();
   const pushToast = useUiStore((s) => s.pushToast);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [servicioDraft, setServicioDraft] = useState("");
   const [telDraft, setTelDraft] = useState("");
   const [emailDraft, setEmailDraft] = useState("");
 
@@ -98,40 +101,57 @@ export function ProviderFormModal({
     if (open) fetchBase();
   }, [open, fetchBase]);
 
+  // Autoguardado (Alicia 2026-09-07): una key por proveedor (o "nuevo" para
+  // el formulario en blanco) -- así el borrador de uno no se mezcla con el
+  // de otro.
+  const draftKey = editing ? `proveedor:${editing.id}` : "proveedor:nuevo";
+
   useEffect(() => {
     if (!open) return;
-    if (editing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the form to match whichever proveedor was opened for editing
-      setForm({
-        nombre: editing.nombre,
-        paisId: editing.paisId,
-        regionId: editing.regionId ?? "",
-        ciudadId: editing.ciudadId ?? "",
-        categoriaId: editing.categoriaId,
-        estado: editing.estado,
-        contacto: editing.contacto ?? "",
-        cargoContacto: editing.cargoContacto ?? "",
-        web: editing.web ?? "",
-        direccion: editing.direccion ?? "",
-        aforo: editing.aforo != null ? String(editing.aforo) : "",
-        costoReferencia: editing.costoReferencia ?? "",
-        score: editing.score ?? 3,
-        presupuesto: editing.presupuesto ?? "",
-        cobertura: editing.cobertura ?? "",
-        notas: editing.notas ?? "",
-        telefonos: editing.telefonos,
-        emails: editing.emails,
-        servicioIds: editing.servicioIds,
-      });
-      if (editing.paisId) fetchRegiones(editing.paisId);
-      if (editing.regionId) fetchCiudades(editing.regionId);
+    const base: FormState = editing
+      ? {
+          nombre: editing.nombre,
+          paisId: editing.paisId,
+          regionId: editing.regionId ?? "",
+          ciudadId: editing.ciudadId ?? "",
+          categoriaId: editing.categoriaId,
+          estado: editing.estado,
+          contacto: editing.contacto ?? "",
+          cargoContacto: editing.cargoContacto ?? "",
+          web: editing.web ?? "",
+          direccion: editing.direccion ?? "",
+          aforo: editing.aforo != null ? String(editing.aforo) : "",
+          costoReferencia: editing.costoReferencia ?? "",
+          score: editing.score ?? 3,
+          presupuesto: editing.presupuesto ?? "",
+          cobertura: editing.cobertura ?? "",
+          notas: editing.notas ?? "",
+          telefonos: editing.telefonos,
+          emails: editing.emails,
+          servicioIds: editing.servicioIds,
+        }
+      : emptyForm;
+    // Si hay un borrador guardado (se cerró el formulario sin guardar la
+    // última vez) y es distinto de los datos ya guardados, se restaura en
+    // vez del formulario en blanco/original.
+    const draft = readFormDraft<FormState>(draftKey);
+    if (draft && JSON.stringify(draft) !== JSON.stringify(base)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restaurando un borrador guardado, no una sincronización derivable sin efecto
+      setForm(draft);
+      pushToast("Recuperamos un borrador sin guardar de este formulario.", "info");
     } else {
-      setForm(emptyForm);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the form to match whichever proveedor was opened for editing
+      setForm(base);
     }
+    if (editing?.paisId) fetchRegiones(editing.paisId);
+    if (editing?.regionId) fetchCiudades(editing.regionId);
     setErrors({});
     setTelDraft("");
     setEmailDraft("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draftKey se deriva de `editing`, y pushToast es estable
   }, [open, editing, fetchRegiones, fetchCiudades]);
+
+  useFormDraftAutosave(open ? draftKey : null, form, open);
 
   const regionOptions = useMemo(() => regionesPorPais[form.paisId] ?? [], [regionesPorPais, form.paisId]);
   const cityOptions = useMemo(() => ciudadesPorRegion[form.regionId] ?? [], [ciudadesPorRegion, form.regionId]);
@@ -155,6 +175,18 @@ export function ProviderFormModal({
 
   function toggleServicio(id: string) {
     set("servicioIds", form.servicioIds.includes(id) ? form.servicioIds.filter((s) => s !== id) : [...form.servicioIds, id]);
+  }
+
+  async function addServicioNuevo() {
+    const nombre = servicioDraft.trim();
+    if (!nombre) return;
+    try {
+      const creado = await addServicio(nombre);
+      toggleServicio(creado.id);
+      setServicioDraft("");
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : "No se pudo agregar el servicio", "danger");
+    }
   }
 
   function addTelefono() {
@@ -236,7 +268,15 @@ export function ProviderFormModal({
     if (!form.paisId) nextErrors.paisId = "Selecciona el país";
     if (!form.categoriaId) nextErrors.categoriaId = "Selecciona la categoría";
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      // Alicia 2026-09-07: antes, si el campo con error quedaba fuera de
+      // vista (p. ej. Categoría, arriba del todo, mientras se llenaba una
+      // sección más abajo), no pasaba nada visible al guardar -- ahora un
+      // toast resume qué falta y el panel vuelve arriba para mostrarlo.
+      pushToast(`Falta completar: ${Object.values(nextErrors).join(" · ")}`, "danger");
+      panelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
     const input: ProveedorInput = {
       nombre: form.nombre.trim(),
@@ -259,11 +299,12 @@ export function ProviderFormModal({
       emails: form.emails.filter((e) => e.email.trim()),
       servicioIds: form.servicioIds,
     };
+    clearFormDraft(draftKey);
     onSave(input);
   }
 
   return (
-    <Drawer open={open} onClose={onClose}>
+    <Drawer open={open} onClose={onClose} panelRef={panelRef}>
       <FormDrawerHeader
         eyebrow={editing ? "Editar proveedor" : "Registrar proveedor"}
         title={editing ? editing.nombre || "Datos del proveedor" : "Datos del nuevo proveedor"}
@@ -501,6 +542,27 @@ export function ProviderFormModal({
                 );
               })}
               {servicios.length === 0 && <span className="text-xs text-text-3">Sin servicios en el catálogo todavía.</span>}
+            </div>
+            <div className="mt-2 flex gap-2">
+              <Input
+                value={servicioDraft}
+                onChange={(e) => setServicioDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addServicioNuevo();
+                  }
+                }}
+                placeholder="Nuevo servicio (ej. Catering)"
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={addServicioNuevo}
+                className="flex h-[46px] flex-shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-4 text-sm font-medium text-white transition-colors hover:bg-green hover:text-text"
+              >
+                + Agregar
+              </button>
             </div>
           </Field>
           {/* Aforo y costo de referencia: reales, sin equivalente en el mockup -- van al final

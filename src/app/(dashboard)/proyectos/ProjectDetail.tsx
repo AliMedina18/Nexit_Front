@@ -8,6 +8,7 @@ import {
   DetailRow,
   Drawer,
   DrawerCloseButton,
+  DrawerExpandButton,
   DrawerFooter,
   DrawerHeader,
   DrawerIconButton,
@@ -16,12 +17,15 @@ import { EntityAttachments } from "@/components/ui/EntityAttachments";
 import { Textarea } from "@/components/ui/form";
 import { BRIEF_STATUS_COLORS, PROJECT_STATUS_COLORS, PROVIDER_STATUS_COLORS, statusColor } from "@/lib/constants";
 import { fmtDateLong } from "@/lib/format";
+import { descripcionHistorial, fmtFechaHora } from "@/lib/historial";
+import { historialApi } from "@/services/api/historial-service";
 import { proyectoAdjuntosApi } from "@/services/api/proyecto-adjuntos-service";
 import { proyectosApi } from "@/services/api/proyectos-service";
+import { usuariosApi } from "@/services/api/usuarios-service";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useClientesStore } from "@/store/clientes-store";
 import { useUiStore } from "@/store/ui-store";
-import type { Proveedor, Proyecto, SeguimientoProyecto } from "@/types/api";
+import type { HistorialCambio, Proveedor, Proyecto, SeguimientoProyecto } from "@/types/api";
 
 // Debe calzar EXACTO con `Areas` en Nexit_Back/.../Validators/Proyectos/ProyectoValidators.cs
 // (CrearSeguimientoProyectoValidator) -- si no coincide, agregar la entrada a la bitácora
@@ -45,11 +49,70 @@ export function ProjectDetail({
 }) {
   const { estadosProyecto, categoriasProveedor, fetchBase } = useCatalogosStore();
   const { items: clientes, fetchAll: fetchClientes } = useClientesStore();
+  const [historial, setHistorial] = useState<HistorialCambio[]>([]);
+  const [historialCargando, setHistorialCargando] = useState(false);
+  // Alicia 2026-09-08: "que lo pueda agrandar un poquito" -- el panel de
+  // detalle empieza angosto (520px) y se puede agrandar con un clic.
+  const [wide, setWide] = useState(false);
+  // Alicia 2026-09-08: "que aparezca toda la información... hay mucha
+  // información cuando lo editamos, pero nunca la vemos directamente" --
+  // el gerente responsable se podía asignar en el formulario pero nunca
+  // se mostraba acá. `getById` (a diferencia de `list`) lo puede pedir
+  // cualquier usuario autenticado, no solo admin/super_admin -- ver
+  // usuarios-service.ts.
+  const [gerenteNombre, setGerenteNombre] = useState<string | null>(null);
 
   useEffect(() => {
     fetchBase();
     fetchClientes();
   }, [fetchBase, fetchClientes]);
+
+  useEffect(() => {
+    if (!project?.gerenteId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el gerente del proyecto anterior al cerrar el drawer o si no tiene uno asignado
+      setGerenteNombre(null);
+      return;
+    }
+    let cancelado = false;
+    usuariosApi
+      .getById(project.gerenteId)
+      .then((u) => {
+        if (!cancelado) setGerenteNombre(`${u.nombre} ${u.apellido}`.trim());
+      })
+      .catch(() => {
+        if (!cancelado) setGerenteNombre(null);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [project?.gerenteId]);
+
+  // Historial de cambios (docs/19/20) -- mismo patrón que ClienteDetail, la pantalla
+  // que lo estrenó; a Proveedores y Proyectos nunca les había llegado esta sección
+  // aunque el backend ya registra los cambios de las 3 entidades por igual.
+  useEffect(() => {
+    if (!project) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el historial del proyecto anterior al cerrar el drawer
+      setHistorial([]);
+      return;
+    }
+    let cancelado = false;
+    setHistorialCargando(true);
+    historialApi
+      .porEntidad("proyecto", project.id)
+      .then((rows) => {
+        if (!cancelado) setHistorial(rows);
+      })
+      .catch(() => {
+        if (!cancelado) setHistorial([]);
+      })
+      .finally(() => {
+        if (!cancelado) setHistorialCargando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [project]);
 
   if (!project) return <Drawer open={false} onClose={onClose} size="detail"><></></Drawer>;
 
@@ -71,13 +134,14 @@ export function ProjectDetail({
       : "Sin facturar";
 
   return (
-    <Drawer open={Boolean(project)} onClose={onClose} size="detail">
+    <Drawer open={Boolean(project)} onClose={onClose} size="detail" wide={wide}>
       <DrawerHeader>
         <div className="min-w-0 flex-1">
           <div className="text-lg font-semibold leading-tight tracking-[-0.025em]">{project.nombre || "(Sin nombre)"}</div>
           <div className="mt-[3px] text-[13px] text-text-3">{cliente?.nombre || "Sin cliente"}</div>
         </div>
         <div className="flex flex-shrink-0 gap-1.5">
+          <DrawerExpandButton wide={wide} onToggle={() => setWide((w) => !w)} />
           <DrawerIconButton label="Editar proyecto" onClick={onEdit}>
             <Pencil size={15} strokeWidth={1.8} />
           </DrawerIconButton>
@@ -121,6 +185,7 @@ export function ProjectDetail({
         </DetailBox>
 
         <DetailBox title="Equipo">
+          <DetailRow k="Gerente responsable" v={gerenteNombre || "—"} />
           <DetailRow k="Contacto cliente" v={project.contactoProyecto || "—"} />
           {project.equipo.length === 0 ? (
             <DetailRow k="Miembros" v="—" />
@@ -167,6 +232,25 @@ export function ProjectDetail({
 
         <DetailBox title="Bitácora de seguimiento" tone="plain">
           <Bitacora proyectoId={project.id} />
+        </DetailBox>
+
+        <DetailBox title="Historial de cambios" tone="plain">
+          {historialCargando ? (
+            <div className="py-1 text-sm text-text-3">Cargando…</div>
+          ) : historial.length === 0 ? (
+            <div className="py-1 text-sm text-text-3">Todavía no hay cambios registrados.</div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {historial.map((h) => (
+                <div key={h.id} className="border-l-2 border-border pl-3 text-[13px]">
+                  <div>
+                    <b className="font-semibold">{h.usuarioNombre || "Alguien"}</b> {descripcionHistorial(h)}
+                  </div>
+                  <div className="font-mono text-[11px] text-text-3">{fmtFechaHora(h.fecha)}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </DetailBox>
       </div>
 

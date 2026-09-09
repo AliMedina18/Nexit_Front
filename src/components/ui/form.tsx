@@ -8,7 +8,7 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 import { cloneElement, isValidElement, useState } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, type LucideIcon } from "lucide-react";
 import clsx from "clsx";
 
 /** bg-surface (blanco), no bg-bg -- ported 2026-08-28: en el mockup los campos
@@ -25,12 +25,20 @@ const invalidClass = "border-red focus:border-red";
 
 export function Field({
   label,
+  icon: Icon,
   error,
   required,
   children,
   hint,
 }: {
   label: string;
+  /**
+   * Ícono al lado de la etiqueta (Alicia, 2026-09-08: "utiliza íconos para lo de rol, mensaje,
+   * porque es más lindo en los formularios"). Opcional a propósito: los formularios largos de
+   * clientes/proveedores/proyectos se leen mejor sin un ícono por campo, así que se pone solo donde
+   * el campo tiene una identidad clara (un rol, un correo, un mensaje) y no en cada casilla.
+   */
+  icon?: LucideIcon;
   error?: string;
   required?: boolean;
   children: ReactNode;
@@ -51,8 +59,11 @@ export function Field({
 
   return (
     <div className="mb-3.5">
-      <label className="mb-1.5 block text-xs font-medium text-text-2">
-        {label} {required && <span className="text-red">*</span>}
+      <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-text-2">
+        {Icon && <Icon size={13} strokeWidth={1.9} className="text-text-3" aria-hidden />}
+        <span>
+          {label} {required && <span className="text-red">*</span>}
+        </span>
       </label>
       {control}
       {hint}
@@ -105,8 +116,12 @@ export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectE
   return <select className={clsx(controlClass, "cursor-pointer", className)} {...props} />;
 }
 
-export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={clsx(controlClass, "min-h-[72px] resize-y", className)} {...props} />;
+export function Textarea({
+  className,
+  invalid,
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & { invalid?: boolean }) {
+  return <textarea className={clsx(controlClass, "min-h-[72px] resize-y", invalid && invalidClass, className)} {...props} />;
 }
 
 export function Row({ cols = 2, children }: { cols?: 2 | 3; children: ReactNode }) {

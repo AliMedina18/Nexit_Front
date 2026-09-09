@@ -394,6 +394,18 @@ export interface DropdownGroup {
  * mockup no modelaba con un `<optgroup>`, pero es dato real y no se podía
  * perder solo por pasar del `<select>` nativo a este panel).
  */
+/** Sin tildes y en minúsculas, para que buscar "bogota" encuentre "Bogotá". */
+function normalizarBusqueda(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+/** A partir de cuántas opciones vale la pena mostrar el campo de búsqueda --
+ * con 2-3 opciones (p. ej. sí/no) el campo solo estorba. */
+const DROPDOWN_SEARCH_THRESHOLD = 6;
+
 export function Dropdown({
   value,
   onChange,
@@ -413,20 +425,72 @@ export function Dropdown({
   disabledHint?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  // Alicia pidió que el panel se acomode a la pantalla: si no cabe hacia abajo
+  // (p. ej. un filtro cerca del borde inferior en una tabla larga), se abre
+  // hacia arriba en su lugar -- antes siempre abría hacia abajo sin importar
+  // el espacio disponible.
+  const [openUpward, setOpenUpward] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) {
+      // Limpiar el buscador al cerrar: se corre una sola vez por cierre y no encadena renders
+      // (el panel ya está desmontado).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setQuery("");
+      return;
+    }
+    // Estimado de la altura del panel (lista + buscador si aplica) para decidir
+    // de qué lado hay espacio real -- no hace falta exacto, solo evitar que se
+    // salga de la pantalla.
+    const flat = groups ? groups.flatMap((g) => g.options) : (options ?? []);
+    const estimatedHeight = Math.min(266, flat.length * 33 + 40) + (flat.length > DROPDOWN_SEARCH_THRESHOLD ? 44 : 0) + 20;
+    const rect = ref.current?.getBoundingClientRect();
+    if (rect) {
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setOpenUpward(spaceBelow < estimatedHeight && spaceAbove > spaceBelow);
+    }
+    searchRef.current?.focus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo debe recalcular al abrir/cerrar
   }, [open]);
 
   const flatOptions = groups ? groups.flatMap((g) => g.options) : (options ?? []);
   const current = flatOptions.find((o) => o.value === value)?.label;
   const label = disabled ? (disabledHint ?? placeholder) : (current ?? placeholder);
+  const showSearch = flatOptions.length > DROPDOWN_SEARCH_THRESHOLD;
+
+  const q = normalizarBusqueda(query.trim());
+  const coincide = (o: DropdownOption) => !q || normalizarBusqueda(o.label).includes(q);
+  const filteredOptions = (options ?? []).filter(coincide);
+  const filteredGroups = groups?.map((g) => ({ ...g, options: g.options.filter(coincide) })).filter((g) => g.options.length > 0);
+  const totalMatches = filteredGroups ? filteredGroups.reduce((n, g) => n + g.options.length, 0) : filteredOptions.length;
+
+  function selectFirstMatch() {
+    const first = filteredGroups ? filteredGroups[0]?.options[0] : filteredOptions[0];
+    if (first) {
+      onChange(first.value);
+      setOpen(false);
+    }
+  }
 
   return (
     <div className="relative" ref={ref}>
@@ -448,32 +512,61 @@ export function Dropdown({
       {open && !disabled && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-[45px] z-[61] flex max-h-[266px] w-max min-w-full max-w-[290px] flex-col gap-[1px] overflow-y-auto rounded-[var(--radius-lg)] border border-text bg-surface p-[5px] shadow-[0_12px_34px_rgba(12,12,12,0.16)]">
-            <DropdownItem label={placeholder} selected={!value} onClick={() => { onChange(""); setOpen(false); }} />
-            {groups
-              ? groups.map((g) => (
-                  <div key={g.label}>
-                    <div className="px-[9px] pb-1 pt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
-                      {g.label}
+          <div
+            className={clsx(
+              "absolute left-0 z-[61] flex max-h-[266px] w-max min-w-full max-w-[min(290px,calc(100vw-24px))] flex-col overflow-y-auto rounded-[var(--radius-lg)] border border-text bg-surface p-[5px] shadow-[0_12px_34px_rgba(12,12,12,0.16)]",
+              openUpward ? "bottom-[45px]" : "top-[45px]",
+            )}
+          >
+            {showSearch && (
+              <div className="sticky top-0 z-[1] -mx-[5px] -mt-[5px] mb-[5px] flex items-center gap-1.5 border-b border-[#EFEDE7] bg-surface px-[9px] py-[7px]">
+                <Search size={13} strokeWidth={2} className="flex-shrink-0 text-text-3" />
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      selectFirstMatch();
+                    }
+                  }}
+                  placeholder="Escribe para buscar…"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-text outline-none placeholder:text-text-3"
+                />
+              </div>
+            )}
+            <div className="flex flex-col gap-[1px]">
+              {!q && <DropdownItem label={placeholder} selected={!value} onClick={() => { onChange(""); setOpen(false); }} />}
+              {filteredGroups
+                ? filteredGroups.map((g) => (
+                    <div key={g.label}>
+                      <div className="px-[9px] pb-1 pt-2 font-mono text-[10px] uppercase tracking-[0.1em] text-text-3">
+                        {g.label}
+                      </div>
+                      {g.options.map((o) => (
+                        <DropdownItem
+                          key={o.value}
+                          label={o.label}
+                          selected={value === o.value}
+                          onClick={() => { onChange(o.value); setOpen(false); }}
+                        />
+                      ))}
                     </div>
-                    {g.options.map((o) => (
-                      <DropdownItem
-                        key={o.value}
-                        label={o.label}
-                        selected={value === o.value}
-                        onClick={() => { onChange(o.value); setOpen(false); }}
-                      />
-                    ))}
-                  </div>
-                ))
-              : (options ?? []).map((o) => (
-                  <DropdownItem
-                    key={o.value}
-                    label={o.label}
-                    selected={value === o.value}
-                    onClick={() => { onChange(o.value); setOpen(false); }}
-                  />
-                ))}
+                  ))
+                : filteredOptions.map((o) => (
+                    <DropdownItem
+                      key={o.value}
+                      label={o.label}
+                      selected={value === o.value}
+                      onClick={() => { onChange(o.value); setOpen(false); }}
+                    />
+                  ))}
+              {showSearch && totalMatches === 0 && (
+                <div className="px-[9px] py-3 text-center text-[13px] text-text-3">Sin resultados para “{query}”</div>
+              )}
+            </div>
           </div>
         </>
       )}
@@ -513,6 +606,28 @@ function DropdownItem({ label, selected, onClick }: { label: string; selected: b
  * hay más de una) al final. Antes esto faltaba por completo en la vista de
  * tabla y de tarjetas -- las listas largas no tenían forma de paginarse.
  */
+/**
+ * Números de página a mostrar, con "…" donde se saltan -- 1, la página
+ * actual +/-1, y la última, siempre. Antes se pintaba un botón POR CADA
+ * página (`Array.from({length: pages})`); con pocas páginas no se notaba,
+ * pero con muchas (p. ej. Proveedores: 138 registros / 15 por página = 10
+ * páginas) la fila se llenaba de botones y quedaba amontonada -- lo que
+ * Alicia describió como que la paginación "no se acomoda", sobre todo ahora
+ * que vive justo encima de las tarjetas. Con esto la fila nunca crece más
+ * de ~7 botones sin importar cuántas páginas haya en total.
+ */
+function paginaNumeros(current: number, pages: number): (number | "…")[] {
+  const delta = 1;
+  const left = Math.max(2, current - delta);
+  const right = Math.min(pages - 1, current + delta);
+  const items: (number | "…")[] = [1];
+  if (left > 2) items.push("…");
+  for (let i = left; i <= right; i++) items.push(i);
+  if (right < pages - 1) items.push("…");
+  if (pages > 1) items.push(pages);
+  return items;
+}
+
 export function Pagination({
   total,
   page,
@@ -573,21 +688,27 @@ export function Pagination({
           >
             <ChevronLeft size={15} strokeWidth={2} />
           </button>
-          {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onPageChange(n)}
-              className={clsx(
-                "h-8 min-w-[32px] cursor-pointer rounded-[var(--radius-md)] border px-2 text-[13px] transition-colors",
-                n === current
-                  ? "border-text bg-text font-semibold text-white"
-                  : "border-border bg-surface font-normal text-text hover:border-text",
-              )}
-            >
-              {n}
-            </button>
-          ))}
+          {paginaNumeros(current, pages).map((n, i) =>
+            n === "…" ? (
+              <span key={`e${i}`} className="flex h-8 min-w-[20px] items-center justify-center text-[13px] text-text-3">
+                …
+              </span>
+            ) : (
+              <button
+                key={n}
+                type="button"
+                onClick={() => onPageChange(n)}
+                className={clsx(
+                  "h-8 min-w-[32px] cursor-pointer rounded-[var(--radius-md)] border px-2 text-[13px] transition-colors",
+                  n === current
+                    ? "border-text bg-text font-semibold text-white"
+                    : "border-border bg-surface font-normal text-text hover:border-text",
+                )}
+              >
+                {n}
+              </button>
+            ),
+          )}
           <button
             type="button"
             title="Siguiente"

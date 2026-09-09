@@ -9,6 +9,7 @@ import { presenciaApi } from "@/services/api/presencia-service";
 import { useAuthStore } from "@/store/auth-store";
 import { usePageToolbarStore } from "@/store/page-toolbar-store";
 import { NAV } from "@/lib/nav-items";
+import { rememberSection } from "@/lib/last-section";
 import { Button } from "@/components/ui/primitives";
 import { ImportExportBar } from "@/components/ui/ImportExportBar";
 import { MobileNav } from "@/components/ui/MobileNav";
@@ -20,6 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const hydrated = useAuthStore((s) => s.hydrated);
+  const estadoPerfil = useAuthStore((s) => s.estadoPerfil);
   const logout = useAuthStore((s) => s.logout);
   const toolbar = usePageToolbarStore((s) => s.config);
 
@@ -28,9 +30,39 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [globalSearch, setGlobalSearch] = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * Guard de sesión Y de registro. Tener sesión en Supabase Auth no alcanza para usar Nexit:
+   * hace falta además un perfil en `usuarios`. Alguien recién invitado tiene lo primero y no lo
+   * segundo, y hasta ahora caía acá dentro con el rol "miembro" por defecto que le pone el Auth
+   * Hook -- veía el dashboard sin ser nadie todavía. Ahora se le manda a /registro, que es donde
+   * acepta su invitación y crea su perfil (el bloqueo de verdad lo hace Nexit_Back con
+   * PerfilRequeridoFilter; esto solo evita que vea una pantalla que no va a funcionarle).
+   */
   useEffect(() => {
-    if (hydrated && !user) router.replace("/login");
-  }, [hydrated, user, router]);
+    if (!hydrated) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    if (estadoPerfil === "sin-perfil") router.replace("/registro");
+  }, [hydrated, user, estadoPerfil, router]);
+
+  // Cuenta desactivada mientras la persona estaba adentro: se le cierra la sesión en vez de
+  // dejarla dando vueltas por una interfaz donde todas las llamadas responden 403.
+  useEffect(() => {
+    if (estadoPerfil !== "inactivo") return;
+    void (async () => {
+      await logout();
+      router.replace("/login");
+    })();
+  }, [estadoPerfil, logout, router]);
+
+  // Recuerda la última sección visitada (Alicia 2026-09-07) -- ver
+  // src/lib/last-section.ts: así "/" y el login después de entrar saben a
+  // dónde llevarte en vez de mandar siempre a Proveedores.
+  useEffect(() => {
+    rememberSection(pathname);
+  }, [pathname]);
 
   /**
    * Heartbeat de presencia en vivo (HU-12, docs/29) -- ping cada 50s mientras
@@ -39,7 +71,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
    * tal cual pide el comentario del propio presencia-service.ts.
    */
   useEffect(() => {
-    if (!user) return;
+    // Solo con perfil completo: sin fila en `usuarios` el ping responde 403, y no tiene sentido
+    // anunciar como "conectada" a una cuenta que todavía no terminó de registrarse.
+    if (!user || estadoPerfil !== "completo") return;
     let interval: ReturnType<typeof setInterval> | null = null;
 
     function pingIfVisible() {
@@ -54,18 +88,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       if (interval) clearInterval(interval);
       document.removeEventListener("visibilitychange", pingIfVisible);
     };
-  }, [user]);
+  }, [user, estadoPerfil]);
 
   useEffect(() => {
     if (!menuOpen) return;
     function onClick(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
     }
+    // Mismo criterio que el resto de overlays (Drawer, Modal, DeleteAction,
+    // la hoja "Más" de móvil): Escape también cierra, no solo el click afuera.
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
     document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onClick);
+      window.removeEventListener("keydown", onKey);
+    };
   }, [menuOpen]);
 
-  if (!hydrated || !user) return null;
+  // "cargando" incluido a propósito: hasta saber si tiene perfil no se pinta el dashboard, para
+  // no mostrar medio segundo de interfaz a alguien que en realidad va camino a /registro.
+  if (!hydrated || !user || estadoPerfil === "cargando" || estadoPerfil === "sin-perfil" || estadoPerfil === "inactivo") return null;
 
   function handleGlobalSearch(value: string) {
     setGlobalSearch(value);
@@ -229,10 +274,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 onExport={toolbar.onExport}
                 onImport={toolbar.onImport}
                 onImported={toolbar.onImported}
+                textos={toolbar.textos}
               />
-              <Button variant="primary" icon={Plus} onClick={toolbar.onAdd}>
-                {toolbar.addLabel}
-              </Button>
+              {toolbar.addLabel && toolbar.onAdd && (
+                <Button variant="primary" icon={toolbar.addIcon ?? Plus} onClick={toolbar.onAdd}>
+                  {toolbar.addLabel}
+                </Button>
+              )}
             </>
           )}
         </div>

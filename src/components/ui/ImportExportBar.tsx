@@ -26,13 +26,32 @@ import type { ImportarResultado } from "@/types/api";
  * con sus propios colores e íconos) en vez de una sola línea de texto plano -- ahora que
  * importar puede tanto crear como actualizar (upsert), una sola frase ya no alcanza para
  * comunicar de un vistazo qué pasó.
+ *
+ * `textos` (2026-09-08) existe para el único caso donde "importar" no significa lo mismo que en
+ * Clientes/Proveedores/Proyectos: en Usuarios, importar es INVITAR (un usuario no puede existir sin
+ * su cuenta de Supabase Auth, así que no se crea desde una fila de Excel -- ver
+ * IUsuariosImportExporter en Nexit_Back). Ahí "3 usuarios nuevos" sería mentira: son 3 invitaciones
+ * enviadas, y la tarjeta de "ya existían, se actualizaron" no aplica en absoluto.
  */
+/** Ver `textos` en el comentario de ImportExportBar -- todo opcional, con el texto de siempre por defecto. */
+export interface ImportExportTextos {
+  menuImportar?: string;
+  menuExportar?: string;
+  /** Etiqueta de la tarjeta verde del resultado, p. ej. "invitaciones enviadas". Recibe el conteo para poder decidir singular/plural. */
+  etiquetaCreados?: (n: number) => string;
+  /** Oculta la tarjeta de "ya existían, se actualizaron" donde actualizar no es una posibilidad real. */
+  sinActualizados?: boolean;
+  /** Reemplaza el mensajito flotante de éxito. */
+  toastExito?: (resultado: ImportarResultado) => string;
+}
+
 export function ImportExportBar({
   entidad,
   puedeImportar,
   onExport,
   onImport,
   onImported,
+  textos,
 }: {
   /** Para los mensajes ("clientes", "proveedores", "proyectos") y el nombre del archivo de respaldo. */
   entidad: string;
@@ -41,6 +60,7 @@ export function ImportExportBar({
   onImport: (archivo: File) => Promise<ImportarResultado>;
   /** Se llama después de una importación con al menos una fila creada o actualizada, para refrescar la lista. */
   onImported: () => void;
+  textos?: ImportExportTextos;
 }) {
   const pushToast = useUiStore((s) => s.pushToast);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,10 +107,9 @@ export function ImportExportBar({
           resultado.creados > 0 ? `${resultado.creados} creados` : null,
           resultado.actualizados > 0 ? `${resultado.actualizados} actualizados` : null,
         ].filter(Boolean);
+        const base = textos?.toastExito ? textos.toastExito(resultado) : `${entidad}: ${partes.join(", ")}`;
         pushToast(
-          resultado.errores.length === 0
-            ? `${entidad}: ${partes.join(", ")}`
-            : `${entidad}: ${partes.join(", ")}, ${resultado.errores.length} fila(s) con error`,
+          resultado.errores.length === 0 ? base : `${base}, ${resultado.errores.length} fila(s) con error`,
           resultado.errores.length === 0 ? "success" : "info",
         );
       } else {
@@ -145,7 +164,7 @@ export function ImportExportBar({
                 className="flex w-full cursor-pointer items-center gap-2.5 rounded-[3px] px-2.5 py-2.5 text-left text-[13px] text-text hover:bg-gray-light"
               >
                 <Upload size={15} strokeWidth={1.8} />
-                Importar desde Excel
+                {textos?.menuImportar ?? "Importar desde Excel"}
               </button>
             )}
             <button
@@ -155,7 +174,7 @@ export function ImportExportBar({
               className="flex w-full cursor-pointer items-center gap-2.5 rounded-[3px] px-2.5 py-2.5 text-left text-[13px] text-text hover:bg-gray-light"
             >
               <Download size={15} strokeWidth={1.8} />
-              Exportar a Excel
+              {textos?.menuExportar ?? "Exportar a Excel"}
             </button>
           </div>
         )}
@@ -169,25 +188,29 @@ export function ImportExportBar({
         {resultado && (
           <div className="flex flex-col gap-4">
             {totalTocados > 0 ? (
-              <div className="grid grid-cols-2 gap-3">
+              <div className={textos?.sinActualizados ? "grid grid-cols-1 gap-3" : "grid grid-cols-2 gap-3"}>
                 <div className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-success-light px-4 py-3.5">
                   <CheckCircle2 size={22} strokeWidth={1.8} className="shrink-0 text-success" />
                   <div>
                     <div className="font-mono text-xl font-semibold leading-none text-success">{resultado.creados}</div>
                     <div className="mt-1 text-[12.5px] text-text-2">
-                      {entidad} {resultado.creados === 1 ? "nuevo" : "nuevos"}
+                      {textos?.etiquetaCreados
+                        ? textos.etiquetaCreados(resultado.creados)
+                        : `${entidad} ${resultado.creados === 1 ? "nuevo" : "nuevos"}`}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-blue-light px-4 py-3.5">
-                  <RefreshCcw size={22} strokeWidth={1.8} className="shrink-0 text-blue" />
-                  <div>
-                    <div className="font-mono text-xl font-semibold leading-none text-blue">{resultado.actualizados}</div>
-                    <div className="mt-1 text-[12.5px] text-text-2">
-                      {resultado.actualizados === 1 ? "ya existía, se actualizó" : "ya existían, se actualizaron"}
+                {!textos?.sinActualizados && (
+                  <div className="flex items-center gap-3 rounded-[var(--radius-lg)] border border-border bg-blue-light px-4 py-3.5">
+                    <RefreshCcw size={22} strokeWidth={1.8} className="shrink-0 text-blue" />
+                    <div>
+                      <div className="font-mono text-xl font-semibold leading-none text-blue">{resultado.actualizados}</div>
+                      <div className="mt-1 text-[12.5px] text-text-2">
+                        {resultado.actualizados === 1 ? "ya existía, se actualizó" : "ya existían, se actualizaron"}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             ) : totalErrores === 0 ? (
               <div className="rounded-[var(--radius-lg)] border border-border bg-gray-light px-4 py-3.5 text-[13px] text-text-2">

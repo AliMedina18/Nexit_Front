@@ -8,6 +8,7 @@ import { RowAction } from "./Table";
 import { solicitudesEliminacionApi } from "@/services/api/solicitudes-eliminacion-service";
 import { useAuthStore } from "@/store/auth-store";
 import { useUiStore } from "@/store/ui-store";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import type { TipoEntidadEliminable } from "@/types/api";
 
 /**
@@ -33,6 +34,8 @@ function ConfirmDeleteDialog({
 }) {
   const [motivo, setMotivo] = useState("");
   const [motivoError, setMotivoError] = useState(false);
+  // Mismo lock compartido que Drawer/Modal (ver src/lib/use-body-scroll-lock.ts).
+  useBodyScrollLock(open);
 
   if (typeof document === "undefined" || !open) return null;
 
@@ -64,7 +67,7 @@ function ConfirmDeleteDialog({
             <p className="mt-2 text-sm leading-relaxed text-text-2">
               {esAdmin
                 ? "Esta acción no se puede deshacer."
-                : "Esto no borra nada todavía: se envía una solicitud de eliminación a un administrador. Si la aprueba, ahí sí se elimina de la base."}
+                : "Un administrador revisa la solicitud y decide si se elimina o no. Te llega una notificación con la respuesta."}
             </p>
           </div>
         </div>

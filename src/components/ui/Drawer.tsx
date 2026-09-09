@@ -1,37 +1,59 @@
 "use client";
 
-import { useRef, type ChangeEvent, type ReactNode } from "react";
+import { useRef, type ChangeEvent, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { Upload, X } from "lucide-react";
+import { Maximize2, Minimize2, Upload, X } from "lucide-react";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import styles from "@/styles/drawer.module.css";
 
 /**
  * `size` separa los dos anchos del mockup aprobado: 520px para los drawers de
  * detalle (solo lectura) y 620px para los de formulario. Por defecto queda en
  * `form` porque es el ancho que ya tenían todos los drawers antes de esta
- * distinción.
+ * distinción. También separa el z-index: un formulario siempre debe quedar
+ * por encima de un detalle si ambos llegan a estar montados a la vez (p. ej.
+ * mientras el detalle termina su transición de cierre), para que nunca tape
+ * al formulario -- antes ambos usaban el mismo z-50 y quién quedaba encima
+ * dependía del orden en el DOM, así que a veces el detalle "se comía" los
+ * clics del formulario de edición.
+ *
+ * `wide` (Alicia 2026-09-08: "cuando veo el detalle de un cliente/proveedor,
+ * que lo pueda agrandar un poquito") -- los 520px de un detalle se sentían
+ * cortos para revisar todo lo guardado sin ir haciendo scroll a cada rato;
+ * el botón de agrandar en el encabezado alterna a `panelDetailWide` (ver
+ * drawer.module.css). Solo aplica junto con `size="detail"`.
  */
 export function Drawer({
   open,
   onClose,
   size = "form",
+  wide = false,
+  panelRef,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   size?: "detail" | "form";
+  wide?: boolean;
+  /** Ref opcional al panel que hace scroll (Alicia 2026-09-07): los
+   * formularios largos lo usan para volver arriba y mostrar un campo
+   * requerido que quedó sin llenar -- si no, al fallar la validación no
+   * pasaba nada visible mientras el panel seguía desplazado hacia abajo. */
+  panelRef?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }) {
+  useBodyScrollLock(open);
   if (typeof document === "undefined") return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-end bg-black/40 transition-opacity"
+      className={`fixed inset-0 ${size === "form" ? "z-[55]" : "z-50"} flex items-start justify-end bg-black/40 transition-opacity`}
       style={{ opacity: open ? 1 : 0, pointerEvents: open ? "all" : "none" }}
       onClick={onClose}
     >
       <div
-        className={`flex h-screen ${size === "detail" ? styles.panelDetail : styles.panel} flex-col overflow-y-auto border-l border-border bg-surface transition-transform`}
+        ref={panelRef}
+        className={`flex h-screen ${size === "detail" ? (wide ? styles.panelDetailWide : styles.panelDetail) : styles.panel} flex-col overflow-y-auto border-l border-border bg-surface transition-transform`}
         style={{ transform: open ? "translateX(0)" : "translateX(20px)" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -80,6 +102,15 @@ export function DrawerCloseButton({ onClose }: { onClose: () => void }) {
   return (
     <DrawerIconButton label="Cerrar" onClick={onClose}>
       <X size={15} strokeWidth={1.9} />
+    </DrawerIconButton>
+  );
+}
+
+/** Botón para agrandar/achicar el panel de detalle (Alicia 2026-09-08) -- ver `wide` en Drawer. */
+export function DrawerExpandButton({ wide, onToggle }: { wide: boolean; onToggle: () => void }) {
+  return (
+    <DrawerIconButton label={wide ? "Achicar panel" : "Agrandar panel"} onClick={onToggle}>
+      {wide ? <Minimize2 size={14} strokeWidth={1.8} /> : <Maximize2 size={14} strokeWidth={1.8} />}
     </DrawerIconButton>
   );
 }

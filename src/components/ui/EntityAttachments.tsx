@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, ExternalLink, Upload, X } from "lucide-react";
+import { Download, ExternalLink, Link2, Upload, X } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { fileIcon, fmtSize } from "@/lib/format";
 import { toSafeHref } from "@/lib/url-safety";
@@ -34,6 +34,12 @@ export interface AttachmentsApi<T extends AttachmentLike> {
  * "Archivos y enlaces" genérico -- generalizado 2026-09-03 desde el que ya existía solo para
  * proveedores (ver docs/28, HU-13) para poder reutilizarlo también en Cliente y Proyecto, que
  * comparten exactamente el mismo contrato de adjuntos del lado del backend.
+ *
+ * Rediseñado 2026-09-08 (Alicia: "el diseño de archivos y enlaces... muy feo, mejora este
+ * diseño") -- la zona de arrastre y las filas de la lista eran muy planas y apretadas
+ * comparadas con el resto de la app; ahora usan el mismo lenguaje visual que ya se estableció
+ * en otras pantallas (cajas con borde suave tipo DetailBox, ícono en una placa redondeada,
+ * botón de acción principal en verde-azulado sólido como el "+ Agregar" de servicios).
  */
 export function EntityAttachments<T extends AttachmentLike>({
   entityId,
@@ -170,7 +176,7 @@ export function EntityAttachments<T extends AttachmentLike>({
           if (!uploading) handleFiles(e.dataTransfer.files);
         }}
         aria-busy={uploading}
-        className={`mb-2.5 flex flex-col items-center gap-1 rounded-[var(--radius-md)] border-[1.5px] border-dashed p-3.5 text-center transition-colors ${uploading ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+        className={`mb-3 flex flex-col items-center gap-2 rounded-[var(--radius-lg)] border-[1.5px] border-dashed px-4 py-6 text-center transition-colors ${uploading ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
         style={{
           borderColor: dragOver ? "var(--teal-mid)" : "var(--border-strong)",
           background: dragOver ? "var(--teal-light)" : "transparent",
@@ -180,10 +186,13 @@ export function EntityAttachments<T extends AttachmentLike>({
           <Spinner label="Subiendo…" />
         ) : (
           <>
-            <Upload size={18} strokeWidth={1.5} className="text-text-3" />
-            <span className="pointer-events-none text-xs text-text-2">
-              Arrastra un PDF o Excel (máx. 20 MB) o haz clic para subir
-            </span>
+            <div className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: "var(--teal-light)" }}>
+              <Upload size={16} strokeWidth={1.75} style={{ color: "var(--teal-mid)" }} />
+            </div>
+            <div className="pointer-events-none">
+              <div className="text-[13px] font-medium text-text">Arrastra un archivo aquí</div>
+              <div className="mt-0.5 text-[11px] text-text-3">o haz clic para subir · PDF o Excel, máx. 20 MB</div>
+            </div>
           </>
         )}
         <input
@@ -200,30 +209,31 @@ export function EntityAttachments<T extends AttachmentLike>({
         />
       </div>
 
-      <div className="mb-2.5 flex gap-1.5">
+      <div className="mb-3 flex gap-2">
         <input
           value={linkName}
           onChange={(e) => setLinkName(e.target.value)}
           placeholder="Nombre del link"
-          className="flex-1 rounded-[var(--radius-md)] border border-border bg-surface px-2.5 py-1.5 text-[13px] text-text outline-none focus:border-teal-mid"
+          className="h-10 flex-1 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-[13px] text-text outline-none transition-colors focus:border-teal-mid"
         />
         <input
           value={linkUrl}
           onChange={(e) => setLinkUrl(e.target.value)}
           placeholder="https://…"
           onKeyDown={(e) => e.key === "Enter" && addLink()}
-          className="flex-1 rounded-[var(--radius-md)] border border-border bg-surface px-2.5 py-1.5 text-[13px] text-text outline-none focus:border-teal-mid"
+          className="h-10 flex-1 rounded-[var(--radius-md)] border border-border bg-surface px-3 text-[13px] text-text outline-none transition-colors focus:border-teal-mid"
         />
         <button
           type="button"
           onClick={addLink}
-          className="flex h-8 flex-shrink-0 cursor-pointer items-center whitespace-nowrap rounded-[var(--radius-md)] border border-border bg-surface px-2.5 text-[13px] font-medium text-text transition-colors hover:border-text hover:bg-bg"
+          className="flex h-10 flex-shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-md)] bg-teal-mid px-3.5 text-[13px] font-medium text-white transition-colors hover:bg-green hover:text-text"
         >
-          + Link
+          <Link2 size={14} strokeWidth={2} />
+          Agregar
         </button>
       </div>
 
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         {loading && <div className="py-2 text-center text-xs text-text-3">Cargando…</div>}
         {!loading && adjuntos.length === 0 && (
           <div className="py-2 text-center text-xs text-text-3">Sin archivos ni links aún</div>
@@ -231,8 +241,13 @@ export function EntityAttachments<T extends AttachmentLike>({
         {adjuntos.map((a) => {
           const Icon = fileIcon(a.nombre, a.tipo === "link" ? "link" : "file");
           return (
-            <div key={a.id} className="flex items-center gap-2 rounded-[var(--radius-md)] bg-gray-light px-2.5 py-2">
-              <Icon size={16} strokeWidth={1.75} className="flex-shrink-0 text-text-2" />
+            <div
+              key={a.id}
+              className="flex items-center gap-2.5 rounded-[var(--radius-md)] border border-[#EFEDE7] bg-[#FBFAF7] px-3 py-2.5 transition-colors hover:border-border"
+            >
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] bg-gray-light">
+                <Icon size={15} strokeWidth={1.75} className="text-text-2" />
+              </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[13px] font-medium">{a.nombre}</div>
                 <div className="mt-0.5 truncate text-[11px] text-text-3">
@@ -243,7 +258,7 @@ export function EntityAttachments<T extends AttachmentLike>({
                 <button
                   onClick={() => openAdjunto(a)}
                   disabled={downloadingId === a.id}
-                  className="flex cursor-pointer items-center rounded border-none bg-transparent p-1 text-text-2 hover:bg-border disabled:cursor-not-allowed disabled:opacity-60"
+                  className="flex cursor-pointer items-center rounded-[var(--radius-md)] border-none bg-transparent p-1.5 text-text-2 hover:bg-border disabled:cursor-not-allowed disabled:opacity-60"
                   aria-label={a.tipo === "link" ? "Abrir link" : "Descargar"}
                 >
                   {downloadingId === a.id ? (
@@ -256,7 +271,7 @@ export function EntityAttachments<T extends AttachmentLike>({
                 </button>
                 <button
                   onClick={() => removeAdjunto(a.id)}
-                  className="flex cursor-pointer items-center rounded border-none bg-transparent p-1 text-red hover:bg-border"
+                  className="flex cursor-pointer items-center rounded-[var(--radius-md)] border-none bg-transparent p-1.5 text-red hover:bg-border"
                   aria-label="Eliminar"
                 >
                   <X size={14} strokeWidth={2} />

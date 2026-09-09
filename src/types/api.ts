@@ -321,6 +321,19 @@ export interface UsuarioCreateInput {
   activo?: boolean;
 }
 
+/**
+ * Alta manual, sin correo de invitación de por medio (`POST /api/usuarios/registrar`): el backend
+ * crea la cuenta en Supabase Auth y el perfil en un solo paso, así que aquí NO se manda ningún id.
+ * La persona entra la primera vez con el código del login y ahí crea su contraseña.
+ */
+export interface UsuarioRegistrarInput {
+  nombre: string;
+  apellido: string;
+  email: string;
+  rol: Rol;
+  iniciales?: string | null;
+}
+
 export interface UsuarioUpdateInput {
   nombre: string;
   apellido: string;
@@ -421,7 +434,8 @@ export type CatalogoTipo = "paises" | "regiones" | "ciudades" | "categorias-prov
 // Solicitudes de eliminación
 // ---------------------------------------------------------------------------
 
-export type TipoEntidadEliminable = "cliente" | "proveedor" | "proyecto";
+/** "usuario" se agregó el 2026-09-08: eliminar a una persona también pasa por solicitud (Nexit_Back/docs/40). */
+export type TipoEntidadEliminable = "cliente" | "proveedor" | "proyecto" | "usuario";
 
 export interface SolicitudEliminacionInput {
   tipoEntidad: TipoEntidadEliminable;
@@ -437,7 +451,8 @@ export interface SolicitudEliminacion {
   id: string;
   tipoEntidad: TipoEntidadEliminable;
   entidadId: string;
-  solicitadoPorId: string;
+  /** Null si esa cuenta se eliminó después -- la solicitud sobrevive sin dueño. */
+  solicitadoPorId?: string | null;
   motivo?: string | null;
   estado: string;
   gerenteResponsableId?: string | null;
@@ -474,7 +489,8 @@ export type TipoEntidadHistorial = "proyecto" | "proveedor" | "cliente";
 
 export interface HistorialCambio {
   id: string;
-  usuarioId: string;
+  /** Null si esa cuenta se eliminó después -- la fila del historial no se borra nunca. */
+  usuarioId?: string | null;
   usuarioNombre?: string | null;
   accion: string;
   campo?: string | null;
@@ -497,6 +513,28 @@ export interface AceptarInvitacionInput {
   nombre: string;
   apellido: string;
   iniciales?: string | null;
+}
+
+/** Invitar a varios correos de una sola vez (POST /api/invitaciones/lote) -- todos con el mismo rol y mensaje. */
+export interface InvitacionLoteInput {
+  emails: string[];
+  rol: Rol;
+  mensaje?: string | null;
+}
+
+export interface InvitacionFallida {
+  email: string;
+  motivo: string;
+}
+
+/**
+ * Resultado de un envío por lote. No es "todo o nada" a propósito (ver
+ * CrearInvitacionesLoteUseCase en Nexit_Back): un correo repetido o de un dominio ajeno no
+ * cancela el resto, así que la pantalla tiene que mostrar las dos listas.
+ */
+export interface InvitacionesLoteResultado {
+  enviadas: Invitacion[];
+  fallidas: InvitacionFallida[];
 }
 
 export interface Invitacion {

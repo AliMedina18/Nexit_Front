@@ -32,9 +32,23 @@
   }
 }
 
+/* Fijo al viewport (Alicia 2026-09-07): antes el riel era un simple hijo
+   de .shell (grid de 1 sola fila), así que su altura quedaba estirada a la
+   de la fila completa -- que crece con el contenido de .main. Con "Todas"
+   las filas visibles (p. ej. Proveedores con 138 tarjetas) .main se vuelve
+   mucho más alto que la pantalla, y el riel se estiraba con él: la cuenta
+   y "Cerrar sesión", que van al fondo del riel (mt-auto), terminaban muy
+   por debajo del viewport y solo se llegaba a ellas bajando hasta el final
+   de TODA la página. `position: sticky` + una altura fija de 100vh hace
+   que el riel se quede pegado a la ventana sin importar cuánto crezca el
+   contenido de al lado. */
 .rail {
+  position: sticky;
+  top: 0;
   display: flex;
   width: 100%;
+  height: 100vh;
+  overflow-y: auto;
 }
 @media (max-width: 1000px) {
   .rail {
@@ -42,9 +56,12 @@
   }
 }
 
+/* Padding lateral subido de 36 a 44px (Alicia 2026-09-07): las tarjetas/
+   tablas quedaban muy pegadas al riel de navegación, sin aire entre uno y
+   otro. */
 .main {
   width: 100%;
-  padding: 102px 36px 40px;
+  padding: 102px 44px 40px;
 }
 
 .desktopTopbar {

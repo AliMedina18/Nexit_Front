@@ -1,3 +1,4 @@
+import type { Rol } from "@/types/api";
 import {
   FileArchive,
   FileAudio,
@@ -69,6 +70,51 @@ export const BRIEF_STATUS_COLORS: Record<string, { bg: string; c: string }> = {
   "Requiere ajustes": { bg: "#FCEBEB", c: "#791F1F" },
   Aprobado: { bg: "#EAF3DE", c: "#27500A" },
 };
+
+/**
+ * Los 4 roles de negocio (Nexit_Back/docs/06), de mayor a menor privilegio. Una sola fuente para la
+ * tabla de usuarios, el panel de perfil, el modal de invitar y el de editar -- antes cada uno tenía
+ * su propia copia del mismo Record y podían desincronizarse.
+ */
+export const ROLES: Rol[] = ["super_admin", "admin", "manager", "miembro"];
+
+/**
+ * Los roles que se pueden ASIGNAR desde la aplicación (Alicia 2026-09-08: "para poder colocar super
+ * admin como rol, jamás"). `super_admin` queda fuera a propósito: es una sola persona, la dueña del
+ * sistema, y su cuenta se sembró directamente en la base. Que la interfaz nunca lo ofrezca evita el
+ * accidente de crear un segundo dueño sin querer -- el backend además lo rechaza (ver los
+ * validadores de invitación/registro y ActualizarUsuarioUseCase).
+ *
+ * `ROLES` (los cuatro) se sigue usando donde solo se LEE: el filtro de la tabla, las etiquetas y los
+ * conteos -- ahí sí hay que poder ver al super admin.
+ */
+export const ROLES_ASIGNABLES: Rol[] = ["admin", "manager", "miembro"];
+
+export const ROL_LABELS: Record<Rol, string> = {
+  super_admin: "Super admin",
+  admin: "Admin",
+  manager: "Manager",
+  miembro: "Miembro",
+};
+
+/** Qué puede hacer cada rol, en una línea -- se muestra junto al selector para no tener que adivinar. */
+export const ROL_DESCRIPCIONES: Record<Rol, string> = {
+  super_admin: "Manda en todo: es el único que crea, edita y elimina usuarios.",
+  admin: "Administra el sistema y decide las solicitudes de eliminación. No toca usuarios.",
+  manager: "Gerente de sus proyectos: endosa la eliminación de los que tiene a cargo.",
+  miembro: "Trabaja en el sistema; para eliminar algo tiene que solicitarlo.",
+};
+
+export const ROL_COLORS: Record<Rol, { bg: string; c: string }> = {
+  super_admin: { bg: "#EEEDFE", c: "#26215C" },
+  admin: { bg: "#E6F1FB", c: "#0C447C" },
+  manager: { bg: "#EAF3DE", c: "#27500A" },
+  miembro: { bg: "#F1EFE8", c: "#444441" },
+};
+
+/** Estado de la cuenta -- distinto de estar conectado ahora mismo (eso es presencia, HU-12). */
+export const CUENTA_ACTIVA_COLOR = { bg: "#E4F9EE", c: "#036B3C" };
+export const CUENTA_INACTIVA_COLOR = { bg: "#FCEBEB", c: "#791F1F" };
 
 /** Country badge colors (2-letter code chip), replacing flag emoji. */
 export const COUNTRY_BADGE_COLORS: Record<string, { bg: string; c: string }> = {

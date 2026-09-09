@@ -28,6 +28,13 @@ interface CatalogosState {
   fetchBase: () => Promise<void>;
   fetchRegiones: (paisId: string) => Promise<Region[]>;
   fetchCiudades: (regionId: string) => Promise<Ciudad[]>;
+  /** Crea un servicio nuevo en el catálogo y lo agrega al estado en caliente
+   * (Alicia 2026-09-08): en el formulario de Proveedor, "Servicios que
+   * presta" antes solo dejaba prender/apagar los que ya existían en el
+   * catálogo -- si el que necesitaba no estaba en la lista (datos
+   * importados incompletos), no había forma de agregarlo sin salir del
+   * formulario. */
+  addServicio: (nombre: string) => Promise<ItemCatalogo>;
 }
 
 export const useCatalogosStore = create<CatalogosState>((set, get) => ({
@@ -72,5 +79,10 @@ export const useCatalogosStore = create<CatalogosState>((set, get) => ({
     const ciudades = await catalogosApi.ciudades.list(regionId);
     set((state) => ({ ciudadesPorRegion: { ...state.ciudadesPorRegion, [regionId]: ciudades } }));
     return ciudades;
+  },
+  addServicio: async (nombre) => {
+    const creado = await catalogosApi.servicios.create(nombre);
+    set((state) => ({ servicios: [...state.servicios, creado] }));
+    return creado;
   },
 }));

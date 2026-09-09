@@ -25,6 +25,8 @@ import { useAuthStore } from "@/store/auth-store";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { usePageToolbarStore } from "@/store/page-toolbar-store";
 import { useProvidersStore } from "@/store/providers-store";
+import { readFilterState, writeFilterState } from "@/lib/use-filter-state";
+import { useGridColumns } from "@/lib/use-grid-columns";
 import { useUiStore } from "@/store/ui-store";
 import { proveedoresApi } from "@/services/api/proveedores-service";
 import type { Proveedor, ProveedorInput } from "@/types/api";
@@ -78,12 +80,66 @@ export default function ProveedoresPage() {
   const [filtEstado, setFiltEstado] = useState("");
   const [soloMios, setSoloMios] = useState(false);
   const [view, setView] = useState<"cards" | "table">("cards");
+  // Columnas de la grilla de tarjetas calculadas para llenar el ancho
+  // disponible sin franja vacía, con o sin el riel expandido (Alicia
+  // 2026-09-08) -- ver use-grid-columns.ts.
+  const { ref: cardsGridRef, columns: cardsGridColumns } = useGridColumns();
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
 
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Proveedor | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+
+  // Autoguardado de filtros (Alicia 2026-09-07): restaura lo que había
+  // quedado filtrado/buscado la última vez en esta pantalla, en esta misma
+  // sesión del navegador (ver src/lib/use-filter-state.ts). Incluye
+  // "Mis proveedores" -- si ya no aplica (0 favoritos) el efecto de arriba
+  // que lo apaga automáticamente sigue funcionando igual.
+  useEffect(() => {
+    const saved = readFilterState<{
+      search: string;
+      filtPais: string;
+      filtRegion: string;
+      filtCiudad: string;
+      filtCat: string;
+      filtEstado: string;
+      soloMios: boolean;
+      view: "cards" | "table";
+    }>("proveedores");
+    if (!saved) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- restaura filtros guardados una sola vez al montar, no es un ciclo de sincronizacion
+    if (saved.search !== undefined) setSearch(saved.search);
+    if (saved.filtPais !== undefined) setFiltPais(saved.filtPais);
+    if (saved.filtRegion !== undefined) setFiltRegion(saved.filtRegion);
+    if (saved.filtCiudad !== undefined) setFiltCiudad(saved.filtCiudad);
+    if (saved.filtCat !== undefined) setFiltCat(saved.filtCat);
+    if (saved.filtEstado !== undefined) setFiltEstado(saved.filtEstado);
+    if (saved.soloMios !== undefined) setSoloMios(saved.soloMios);
+    // Alicia 2026-09-08: NO restauramos `view` (Tarjetas/Tabla) desde la sesion
+    // guardada. Esto era la causa real de "me aparece una tarjeta supergrande":
+    // cada pantalla (Clientes/Proveedores/Proyectos) recordaba su propia vista
+    // por separado en sessionStorage, asi que si en algun momento quedaba en
+    // "Tabla" en una pantalla y en "Tarjetas" en otra, al entrar se veian
+    // distintas entre si -- y las filas de la vista Tabla (una por fila, ancho
+    // completo) se confundian con una tarjeta gigante rota. Los demas filtros
+    // (busqueda, estado, etc.) SI se siguen restaurando; la vista simplemente
+    // siempre arranca en "Tarjetas" para que las tres pantallas se vean iguales.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo debe correr una vez, al montar
+  }, []);
+
+  useEffect(() => {
+    writeFilterState("proveedores", {
+      search,
+      filtPais,
+      filtRegion,
+      filtCiudad,
+      filtCat,
+      filtEstado,
+      soloMios,
+      view,
+    });
+  }, [search, filtPais, filtRegion, filtCiudad, filtCat, filtEstado, soloMios, view]);
 
   useEffect(() => {
     function onGlobalSearch(event: Event) {
@@ -130,6 +186,15 @@ export default function ProveedoresPage() {
     () => (authUser ? providers.filter((p) => p.colaboradores.some((c) => c.usuarioId === authUser.id)).length : 0),
     [providers, authUser],
   );
+
+  // Si ya no queda ningún proveedor marcado (p. ej. Alicia quita el último
+  // corazón mientras el filtro está activo), el botón de abajo se oculta --
+  // apagamos el filtro con él para no dejar la lista atascada en "0 de 0"
+  // sin ninguna forma visible de destrabarla.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- apaga el filtro solo cuando la lista de "mios" queda en 0, no en cada render
+    if (misProveedoresCount === 0 && soloMios) setSoloMios(false);
+  }, [misProveedoresCount, soloMios]);
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
@@ -285,19 +350,25 @@ export default function ProveedoresPage() {
       </div>
 
       <div className={`mb-4 ${styles.filtersPanel}`}>
-        <div className="mb-3 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSoloMios((v) => !v)}
-            aria-pressed={soloMios}
-            className={`flex h-8 items-center gap-[7px] rounded-[20px] border px-3 text-[13px] font-medium transition-colors ${
-              soloMios ? "border-text bg-text text-white" : "border-border bg-surface text-text hover:border-text"
-            }`}
-          >
-            <Heart size={13} strokeWidth={1.8} fill={soloMios ? "currentColor" : "none"} />
-            Mis proveedores ({misProveedoresCount})
-          </button>
-        </div>
+        {/* Antes aparecía siempre, incluso en "Mis proveedores (0)" cuando
+           nadie había marcado ninguno todavía -- un filtro que solo puede
+           devolver una lista vacía no debería estar a la vista. Ahora solo
+           se muestra una vez que hay al menos un proveedor marcado. */}
+        {misProveedoresCount > 0 && (
+          <div className="mb-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSoloMios((v) => !v)}
+              aria-pressed={soloMios}
+              className={`flex h-8 items-center gap-[7px] rounded-[20px] border px-3 text-[13px] font-medium transition-colors ${
+                soloMios ? "border-text bg-text text-white" : "border-border bg-surface text-text hover:border-text"
+              }`}
+            >
+              <Heart size={13} strokeWidth={1.8} fill={soloMios ? "currentColor" : "none"} />
+              Mis proveedores ({misProveedoresCount})
+            </button>
+          </div>
+        )}
 
         <div className={styles.filterControls}>
           <Dropdown
@@ -354,7 +425,7 @@ export default function ProveedoresPage() {
              mucho espacio muerto al lado cuando había pocos resultados. */}
           <div className="border-b border-border pb-3">{paginationBar}</div>
           {view === "cards" ? (
-            <div className={styles.cardsGrid}>
+            <div ref={cardsGridRef} className={styles.cardsGrid} style={{ gridTemplateColumns: `repeat(${cardsGridColumns}, minmax(0, 1fr))` }}>
               {pageRows.map((p) => (
                 <ProviderCard
                   key={p.id}
@@ -457,6 +528,9 @@ export default function ProveedoresPage() {
         provider={detailProvider}
         onClose={() => setDetailId(null)}
         onEdit={() => {
+          // Ver el comentario equivalente en clientes/page.tsx: cerrar el detalle
+          // al abrir editar evita que los dos drawers queden montados a la vez.
+          setDetailId(null);
           setEditing(detailProvider);
           setFormOpen(true);
         }}

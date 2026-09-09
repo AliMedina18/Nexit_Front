@@ -8,35 +8,20 @@ import {
   DetailRow,
   Drawer,
   DrawerCloseButton,
+  DrawerExpandButton,
   DrawerFooter,
   DrawerHeader,
   DrawerIconButton,
 } from "@/components/ui/Drawer";
 import { EntityAttachments } from "@/components/ui/EntityAttachments";
 import { CLIENT_STATUS_COLORS, statusColor } from "@/lib/constants";
+import { descripcionHistorial, fmtFechaHora } from "@/lib/historial";
 import { clienteAdjuntosApi } from "@/services/api/cliente-adjuntos-service";
 import { historialApi } from "@/services/api/historial-service";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useUiStore } from "@/store/ui-store";
 import { toSafeHref } from "@/lib/url-safety";
 import type { Cliente, HistorialCambio, Proyecto } from "@/types/api";
-
-/** "Se cambió {campo} de "X" a "Y"" -- una fila del historial (docs/19/20), mismo texto que
- * usaría cualquier otra pantalla que lo mostrara (esta es la primera en hacerlo). */
-function descripcionHistorial(h: HistorialCambio): string {
-  if (h.accion === "creacion") return "Se creó el registro";
-  if (h.accion === "eliminacion") return "Se eliminó el registro";
-  if (h.campo) {
-    const antes = h.valorAnterior?.trim() ? `"${h.valorAnterior}"` : "vacío";
-    const despues = h.valorNuevo?.trim() ? `"${h.valorNuevo}"` : "vacío";
-    return `${h.campo}: ${antes} → ${despues}`;
-  }
-  return "Se editó el registro";
-}
-
-function fmtFechaHora(iso: string): string {
-  return new Date(iso).toLocaleString("es-CO", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
 
 /**
  * Sin botón de eliminar: aquí solo se mira y se puede editar. Eliminar (o
@@ -59,6 +44,9 @@ export function ClienteDetail({
   const { paises, etapasCliente, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } = useCatalogosStore();
   const [historial, setHistorial] = useState<HistorialCambio[]>([]);
   const [historialCargando, setHistorialCargando] = useState(false);
+  // Alicia 2026-09-08: "que lo pueda agrandar un poquito" -- el panel de
+  // detalle empieza angosto (520px) y se puede agrandar con un clic.
+  const [wide, setWide] = useState(false);
 
   useEffect(() => {
     if (!cliente) return;
@@ -115,7 +103,7 @@ export function ClienteDetail({
   const ciudadNombre = ciudadesPorRegion[cliente.regionId ?? ""]?.find((c) => c.id === cliente.ciudadId)?.nombre ?? cliente.ciudad;
 
   return (
-    <Drawer open={Boolean(cliente)} onClose={onClose} size="detail">
+    <Drawer open={Boolean(cliente)} onClose={onClose} size="detail" wide={wide}>
       <DrawerHeader>
         <Avatar nombre={cliente.nombre} size="lg" />
         <div className="min-w-0 flex-1">
@@ -123,6 +111,7 @@ export function ClienteDetail({
           <div className="mt-[3px] text-[13px] text-text-3">{cliente.sector || "Sin sector"}</div>
         </div>
         <div className="flex flex-shrink-0 gap-1.5">
+          <DrawerExpandButton wide={wide} onToggle={() => setWide((w) => !w)} />
           <DrawerIconButton label="Editar cliente" onClick={onEdit}>
             <Pencil size={15} strokeWidth={1.8} />
           </DrawerIconButton>

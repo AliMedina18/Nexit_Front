@@ -68,6 +68,9 @@ export default function CalendarioPage() {
   // store de proyectos, lo que corría un proyecto de sede al día/mes siguiente cerca de medianoche.
   useEffect(() => {
     let cancelled = false;
+    // Limpiar el error del mes anterior antes de pedir el nuevo; si no, se queda un mensaje viejo
+    // visible mientras carga.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMonthError(null);
     calendarioApi
       .proyectosDelMes(year, monthIndex + 1)

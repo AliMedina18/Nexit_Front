@@ -1,10 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useState, type InputHTMLAttributes } from "react";
+import { useEffect, useState, type InputHTMLAttributes } from "react";
 import { ArrowRight, Mail } from "lucide-react";
 import { Button } from "@/components/ui/primitives";
-import { Logo } from "@/components/ui/Logo";
+import { AuthShell } from "@/components/ui/AuthShell";
 import { Field, Input, PasswordInput } from "@/components/ui/form";
 import { Spinner } from "@/components/ui/Spinner";
 import { Intro } from "@/components/ui/Intro";
@@ -12,6 +12,8 @@ import { useUiStore } from "@/store/ui-store";
 import { authApi } from "@/services/api";
 import { supabase } from "@/lib/supabase-client";
 import { validatePassword } from "@/lib/password-policy";
+import { esDominioPermitido, mensajeDominioNoPermitido } from "@/lib/dominios-correo";
+import { getLastSection } from "@/lib/last-section";
 import styles from "@/styles/login.module.css";
 
 /** Recuerda el último correo usado para iniciar sesión, en este navegador
@@ -21,31 +23,6 @@ import styles from "@/styles/login.module.css";
  * propósito, ver docs/10 -- pero sí puede ahorrarle escribirlo de nuevo). */
 const LAST_EMAIL_KEY = "nexit_last_email";
 
-/** Dominios de correo permitidos para iniciar sesión -- Nexit_Back/docs/09
- * (docs/schema/seed_geografia_categorias_estados.sql, "novena revisión",
- * confirmado 2026-08-23): 'agencianextmkt.com' es el ÚNICO dominio permitido
- * hoy -- lo confirmó la usuaria con cuentas reales bajo ese dominio, y el
- * antiguo placeholder 'nextexperiencial.com' ya se retiró de la tabla. Esta
- * es una validación de UX (mensaje inmediato, sin esperar la ida y vuelta
- * al backend/Supabase) -- el filtro real y definitivo sigue viviendo en
- * Nexit_Back (CreateUsuarioValidator / InvitacionValidators) y en el
- * trigger de Postgres check_usuario_dominio_correo, tal como documenta
- * docs/10. Si algún día se agrega otro dominio, es un INSERT en esa misma
- * tabla del backend -- y hay que reflejarlo acá también. */
-const DOMINIOS_CORREO_PERMITIDOS = ["agencianextmkt.com"];
-
-function esDominioPermitido(correo: string): boolean {
-  const dominio = correo.trim().toLowerCase().split("@")[1];
-  if (!dominio) return false;
-  return DOMINIOS_CORREO_PERMITIDOS.includes(dominio);
-}
-
-function mensajeDominioNoPermitido(): string {
-  if (DOMINIOS_CORREO_PERMITIDOS.length === 1) {
-    return `Solo se permiten correos del dominio @${DOMINIOS_CORREO_PERMITIDOS[0]}.`;
-  }
-  return `Solo se permiten correos de estos dominios: ${DOMINIOS_CORREO_PERMITIDOS.map((d) => `@${d}`).join(", ")}.`;
-}
 function rememberEmail(value: string) {
   try {
     localStorage.setItem(LAST_EMAIL_KEY, value);
@@ -78,12 +55,6 @@ type Step =
   | "recover-request"
   | "recover-code"
   | "recover-password";
-
-const FEATURES = [
-  { label: "Clientes", sub: "con su historial" },
-  { label: "Proyectos", sub: "con equipo asignado" },
-  { label: "Proveedores", sub: "base única" },
-];
 
 /** Input de correo con ícono -- usado en los 3 pasos que piden el correo. */
 function EmailInput({
@@ -163,7 +134,10 @@ export default function LoginPage() {
   }, []);
 
   function goToDashboard() {
-    router.replace("/proveedores");
+    // Antes mandaba siempre a "/proveedores" -- ahora vuelve a la última
+    // sección visitada (o Clientes, si es la primera vez). Ver
+    // src/lib/last-section.ts.
+    router.replace(getLastSection());
   }
 
   /**
@@ -294,73 +268,7 @@ export default function LoginPage() {
   return (
     <>
       <Intro />
-      <div className={`fixed inset-0 z-[300] grid ${styles.shell}`}>
-      {/* Panel izquierdo -- solo presentación, ported 1:1 del mockup (medido con
-          getComputedStyle contra el export de Claude Diseño: patrón isométrico,
-          ícono/colores/tipografía y anillo decorativo exactos, no aproximados). */}
-      <div className={`relative overflow-hidden bg-[#0c0c0c] text-white ${styles.panel}`}>
-        {/* Patrón isométrico de fondo */}
-        <div aria-hidden className={styles.pattern} />
-        {/* Anillo decorativo -- esquina inferior derecha */}
-        <div aria-hidden className={styles.ring} />
-
-        <div className="relative z-[2] font-mono text-[11px] uppercase tracking-[0.14em] text-[#948ea3]">
-          Next Marketing Experiencial
-        </div>
-
-        {/* Bloque centrado como una sola unidad (título + párrafo + features + pie
-            de página) -- así el pie siempre queda pegado al contenido, con el
-            espacio libre repartido arriba/abajo del bloque entero, en vez de
-            quedar pegado al borde inferior de la pantalla sin importar qué tan
-            alta sea la ventana. */}
-        <div className="relative z-[2] flex flex-1 flex-col justify-center">
-          <div className="mb-[26px] flex items-center gap-3.5">
-            <span className="flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-[4px] bg-green text-text">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round">
-                <rect x="9" y="3" width="6" height="6" rx="1" />
-                <rect x="3" y="15" width="6" height="6" rx="1" />
-                <rect x="15" y="15" width="6" height="6" rx="1" />
-                <path d="M12 9v3" />
-                <path d="M6 15v-1a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" />
-              </svg>
-            </span>
-            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-green">Plataforma interna</span>
-          </div>
-          <h1 className={`max-w-[11ch] font-semibold leading-[0.94] tracking-[-0.035em] ${styles.h1}`}>
-            Nexit<span className="text-green">.</span>
-          </h1>
-          <p className={`max-w-[470px] leading-[1.55] text-[#b9b5ac] ${styles.lead}`}>
-            El centro de operación del sistema: gestiona clientes, proyectos y proveedores
-            conectados en tiempo real. Se acabaron las hojas de cálculo sueltas.
-          </p>
-
-          <div className={`flex max-w-[470px] justify-between border-t border-[#262626] ${styles.kpis}`}>
-            {FEATURES.map((f, i) => (
-              <Fragment key={f.label}>
-                {i > 0 && <div className="w-px shrink-0 bg-[#262626]" />}
-                <div className="px-[22px] text-center">
-                  <div className="text-[22px] font-semibold tracking-[-0.02em]">{f.label}</div>
-                  <div className="mt-1.5 font-mono text-[10.5px] tracking-[0.03em] text-text-3">{f.sub}</div>
-                </div>
-              </Fragment>
-            ))}
-          </div>
-
-          <div className="mt-16 font-mono text-[11px] leading-[1.7] text-[#4a4845]">
-            © {new Date().getFullYear()} Next Marketing Experiencial
-            <br />
-            Todos los derechos reservados
-          </div>
-        </div>
-      </div>
-
-      {/* Panel derecho -- el formulario real, paso a paso */}
-      <div className={`flex items-center justify-center overflow-y-auto bg-bg p-6 ${styles.formPanel}`}>
-        <div className="w-full max-w-[380px] py-8">
-          <div className="mb-8">
-            <Logo height={30} />
-          </div>
-
+      <AuthShell>
           {step === "email" && (
             <>
               <div className="mb-1.5 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">Bienvenido</div>
@@ -647,9 +555,7 @@ export default function LoginPage() {
               </a>
             </>
           )}
-        </div>
-      </div>
-      </div>
+      </AuthShell>
     </>
   );
 }

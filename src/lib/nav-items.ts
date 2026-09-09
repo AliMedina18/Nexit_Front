@@ -17,8 +17,8 @@ export const NAV: NavItem[] = [
   { href: "/usuarios", label: "Usuarios", icon: Users },
 ];
 
-/** Los primeros 4 items van en la barra inferior de móvil; el resto ("Informes")
- *  se ve solo en la hoja "Más" -- mismo criterio que el <nav class="nx-mobile">
- *  del mockup (Clientes / Proyectos / Proveedores / Más). */
+/** Los primeros 3 items van en la barra inferior de móvil; el resto (Calendario,
+ *  Informes, Usuarios) se ve solo en la hoja "Más" -- mismo criterio que el
+ *  <nav class="nx-mobile"> del mockup (Clientes / Proyectos / Proveedores / Más). */
 export const MOBILE_NAV_PRIMARY = NAV.slice(0, 3);
 export const MOBILE_NAV_MORE = NAV.slice(3);

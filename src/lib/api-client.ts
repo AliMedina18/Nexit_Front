@@ -20,13 +20,22 @@ export class ApiError extends Error {
   readonly traceId?: string;
   /** Solo presente en errores 400 de validación: campo -> lista de mensajes. */
   readonly fieldErrors?: Record<string, string[]>;
+  /**
+   * Código estable de la causa, para los pocos errores en los que hay que hacer algo
+   * distinto y no solo mostrar el mensaje. Hoy lo manda el backend en dos casos
+   * (PerfilRequeridoFilter): "perfil_requerido" -- la cuenta existe en Supabase Auth pero
+   * todavía no completó su registro en Nexit, hay que mandarla a /registro -- y
+   * "cuenta_inactiva" -- la desactivaron, hay que cerrarle la sesión.
+   */
+  readonly codigo?: string;
 
-  constructor(statusCode: number, message: string, traceId?: string, fieldErrors?: Record<string, string[]>) {
+  constructor(statusCode: number, message: string, traceId?: string, fieldErrors?: Record<string, string[]>, codigo?: string) {
     super(message);
     this.name = "ApiError";
     this.statusCode = statusCode;
     this.traceId = traceId;
     this.fieldErrors = fieldErrors;
+    this.codigo = codigo;
   }
 }
 
@@ -35,6 +44,7 @@ interface BusinessErrorBody {
   message: string;
   traceId: string;
   timestamp: string;
+  codigo?: string;
 }
 
 interface ValidationErrorBody {
@@ -52,7 +62,7 @@ function toApiError(status: number, body: ErrorBody | null): ApiError {
     const firstMessage = firstField ? body.errors[firstField]?.[0] : undefined;
     return new ApiError(status, firstMessage ?? body.title ?? "Los datos enviados no son válidos.", body.traceId, body.errors);
   }
-  return new ApiError(status, body?.message ?? "Ocurrió un error inesperado. Intenta de nuevo.", body?.traceId);
+  return new ApiError(status, body?.message ?? "Ocurrió un error inesperado. Intenta de nuevo.", body?.traceId, undefined, body?.codigo);
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {

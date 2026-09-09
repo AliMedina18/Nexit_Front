@@ -33,6 +33,14 @@
   gap: 12px;
 }
 
+/* Variante de 3 KPIs (Gestión de usuarios) -- con .kpis quedaría un hueco a la
+   derecha, porque esa rejilla siempre reserva 4 columnas. */
+.kpis3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
 /* Variante de 5 KPIs (Informe es la única vista con 5 tarjetas). */
 .kpis5 {
   display: grid;
@@ -42,6 +50,7 @@
 
 @media (max-width: 1000px) {
   .kpis,
+  .kpis3,
   .kpis5 {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -111,9 +120,33 @@
    tamaño razonable y sencillamente se agregan más columnas si el ancho
    sobra, en vez de estirar las que ya hay. `auto-fill` (no `auto-fit`) sigue
    siendo a propósito -- ver el comentario de más abajo sobre por qué la
-   fila de paginación no debe usar la misma lógica de `1fr`. */
+   fila de paginación no debe usar la misma lógica de `1fr`.
+
+   Ajustado dos veces seguidas por lo mismo (Alicia, Proveedores
+   2026-09-07) -- la primera baja (300 -> 270px de mínimo) no alcanzó
+   porque el número de columnas de `auto-fill` no lo decide el mínimo de
+   `minmax()`, lo decide el MÁXIMO cuando es un valor fijo (la spec de CSS
+   Grid usa el máximo para calcular cuántas repeticiones caben, no el
+   mínimo -- un malentendido fácil). Con el máximo en 380px, tres tarjetas
+   necesitaban 1164px libres; con el riel expandido (238px en vez de 68px)
+   más el padding, eso ya no cabía en un ancho de ventana normal y se caía
+   a 2 con una franja vacía a la derecha -- justo lo que reportó Alicia.
+   Bajar el MÁXIMO a 300px (no solo el mínimo) es lo que de verdad
+   garantiza 3 columnas en anchos típicos, con el riel expandido o no.
+   Probado con Playwright en varios anchos (1280 con riel expandido y
+   colapsado, 1920 colapsado) antes de aplicarlo. */
+/* 2026-09-08: seguía habiendo franja vacía a la derecha con el riel
+   colapsado (más ancho disponible) en anchos donde ese ancho no era
+   múltiplo exacto de (300px + gap) -- con un MÁXIMO fijo en px no hay
+   ningún valor que lo evite en todos los anchos (se probó 300 a 380px
+   por Playwright: siempre queda algún ancho con una franja notable, con
+   el riel expandido o colapsado). El número de columnas ahora se calcula
+   en JS (ver use-grid-columns.ts) y se aplica como `grid-template-columns:
+   repeat(N, minmax(0, 1fr))` inline, que sí reparte TODO el ancho sobrante
+   entre las columnas. La regla de acá abajo solo es el fallback antes de
+   que el efecto de React corra (primer paint / sin JS). */
 .cardsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 380px));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 300px));
   gap: 12px;
 }

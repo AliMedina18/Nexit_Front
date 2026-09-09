@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { LogOut, Menu } from "lucide-react";
 import { MOBILE_NAV_MORE, MOBILE_NAV_PRIMARY } from "@/lib/nav-items";
+import { useBodyScrollLock } from "@/lib/use-body-scroll-lock";
 import { useAuthStore } from "@/store/auth-store";
 import styles from "@/styles/shell.module.css";
 
@@ -30,6 +31,12 @@ export function MobileNav() {
   const logout = useAuthStore((s) => s.logout);
   const [moreOpen, setMoreOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // La hoja "Más" es un overlay de pantalla completa igual que Drawer/Modal --
+  // sin esto el fondo se seguía desplazando detrás de ella (el mismo "se
+  // queda pegado" que Alicia reportó, pero este overlay quedó afuera del
+  // primer arreglo porque no usa Drawer.tsx ni Modal.tsx).
+  useBodyScrollLock(moreOpen);
 
   useEffect(() => {
     // Portal only mounts on the client to avoid rendering document on SSR.

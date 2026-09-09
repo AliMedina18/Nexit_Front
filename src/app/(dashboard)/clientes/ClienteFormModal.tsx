@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Drawer, FormDrawerBody, FormDrawerFooter, FormDrawerHeader, FormDrawerSection } from "@/components/ui/Drawer";
 import { Dropdown } from "@/components/ui/primitives";
@@ -9,6 +9,7 @@ import { EntityAttachments } from "@/components/ui/EntityAttachments";
 import { Field, Input, Row, Textarea } from "@/components/ui/form";
 import { CLIENTE_ESTADOS } from "@/lib/constants";
 import { parseCSVFirstRow } from "@/lib/csv";
+import { clearFormDraft, readFormDraft, useFormDraftAutosave } from "@/lib/use-form-draft";
 import { clienteAdjuntosApi } from "@/services/api/cliente-adjuntos-service";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useUiStore } from "@/store/ui-store";
@@ -77,6 +78,7 @@ export function ClienteFormModal({
   const pushToast = useUiStore((s) => s.pushToast);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const panelRef = useRef<HTMLDivElement>(null);
   const [telDraft, setTelDraft] = useState("");
   const [emailDraft, setEmailDraft] = useState("");
 
@@ -84,37 +86,53 @@ export function ClienteFormModal({
     if (open) fetchBase();
   }, [open, fetchBase]);
 
+  // Autoguardado (Alicia 2026-09-07): una key por cliente (o "nuevo" para el
+  // formulario en blanco) -- así el borrador de uno no se mezcla con el de otro.
+  const draftKey = editing ? `cliente:${editing.id}` : "cliente:nuevo";
+
   useEffect(() => {
     if (!open) return;
-    if (editing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the form to match whichever cliente was opened for editing
-      setForm({
-        nombre: editing.nombre,
-        sector: editing.sector ?? "",
-        paisId: editing.paisId ?? "",
-        regionId: editing.regionId ?? "",
-        ciudadId: editing.ciudadId ?? "",
-        estado: editing.estado,
-        etapaId: editing.etapaId ?? "",
-        ciudad: editing.ciudad ?? "",
-        direccion: editing.direccion ?? "",
-        web: editing.web ?? "",
-        contacto: editing.contacto ?? "",
-        cargoContacto: editing.cargoContacto ?? "",
-        valorReferencia: editing.valorReferencia ?? "",
-        notas: editing.notas ?? "",
-        telefonos: editing.telefonos.length > 0 ? editing.telefonos : [],
-        emails: editing.emails.length > 0 ? editing.emails : [],
-      });
-      if (editing.paisId) fetchRegiones(editing.paisId);
-      if (editing.regionId) fetchCiudades(editing.regionId);
+    const base: FormState = editing
+      ? {
+          nombre: editing.nombre,
+          sector: editing.sector ?? "",
+          paisId: editing.paisId ?? "",
+          regionId: editing.regionId ?? "",
+          ciudadId: editing.ciudadId ?? "",
+          estado: editing.estado,
+          etapaId: editing.etapaId ?? "",
+          ciudad: editing.ciudad ?? "",
+          direccion: editing.direccion ?? "",
+          web: editing.web ?? "",
+          contacto: editing.contacto ?? "",
+          cargoContacto: editing.cargoContacto ?? "",
+          valorReferencia: editing.valorReferencia ?? "",
+          notas: editing.notas ?? "",
+          telefonos: editing.telefonos.length > 0 ? editing.telefonos : [],
+          emails: editing.emails.length > 0 ? editing.emails : [],
+        }
+      : emptyForm;
+    // Si hay un borrador guardado (se cerró el formulario sin guardar la
+    // última vez) y es distinto de los datos ya guardados, se restaura en
+    // vez del formulario en blanco/original.
+    const draft = readFormDraft<FormState>(draftKey);
+    if (draft && JSON.stringify(draft) !== JSON.stringify(base)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- restaurando un borrador guardado, no una sincronización derivable sin efecto
+      setForm(draft);
+      pushToast("Recuperamos un borrador sin guardar de este formulario.", "info");
     } else {
-      setForm(emptyForm);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetting the form to match whichever cliente was opened for editing
+      setForm(base);
     }
+    if (editing?.paisId) fetchRegiones(editing.paisId);
+    if (editing?.regionId) fetchCiudades(editing.regionId);
     setErrors({});
     setTelDraft("");
     setEmailDraft("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- draftKey se deriva de `editing`, y pushToast es estable
   }, [open, editing, fetchRegiones, fetchCiudades]);
+
+  useFormDraftAutosave(open ? draftKey : null, form, open);
 
   const regionOptions = useMemo(() => regionesPorPais[form.paisId] ?? [], [regionesPorPais, form.paisId]);
   const cityOptions = useMemo(() => ciudadesPorRegion[form.regionId] ?? [], [ciudadesPorRegion, form.regionId]);
@@ -214,7 +232,11 @@ export function ClienteFormModal({
     const nextErrors: Record<string, string> = {};
     if (!form.nombre.trim()) nextErrors.nombre = "El nombre del cliente es requerido";
     setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) return;
+    if (Object.keys(nextErrors).length > 0) {
+      pushToast(`Falta completar: ${Object.values(nextErrors).join(" · ")}`, "danger");
+      panelRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
 
     // "ciudad" (texto libre) se conserva sincronizada con la ciudad de catálogo elegida --
     // así cualquier pantalla que todavía no resuelva ciudadId (ej. el Excel exportado) sigue
@@ -241,11 +263,12 @@ export function ClienteFormModal({
       telefonos: form.telefonos.filter((t) => t.telefono.trim()),
       emails: form.emails.filter((e) => e.email.trim()),
     };
+    clearFormDraft(draftKey);
     onSave(input);
   }
 
   return (
-    <Drawer open={open} onClose={onClose}>
+    <Drawer open={open} onClose={onClose} panelRef={panelRef}>
       <FormDrawerHeader
         eyebrow={editing ? "Editar cliente" : "Registrar cliente"}
         title={editing ? editing.nombre || "Datos del cliente" : "Datos del nuevo cliente"}

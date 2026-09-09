@@ -59,11 +59,15 @@ export function Td({ children, className }: { children: ReactNode; className?: s
 export function RowAction({
   label,
   tone = "neutral",
+  disabled = false,
   onClick,
   children,
 }: {
   label: string;
   tone?: "neutral" | "danger";
+  /** Para acciones que existen pero no aplican a ESTA fila (p. ej. eliminar la propia cuenta):
+   *  se ve apagada en vez de dejar hacer clic y recibir un error del backend. */
+  disabled?: boolean;
   onClick: (e: MouseEvent) => void;
   children: ReactNode;
 }) {
@@ -72,11 +76,14 @@ export function RowAction({
       type="button"
       aria-label={label}
       title={label}
+      disabled={disabled}
       onClick={onClick}
-      className={`inline-flex h-[30px] w-[30px] flex-shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-md)] border border-border bg-transparent text-text-2 transition-colors ${
-        tone === "danger"
-          ? "hover:border-red hover:bg-red-light hover:text-red"
-          : "hover:border-text hover:bg-text hover:text-green"
+      className={`inline-flex h-[30px] w-[30px] flex-shrink-0 items-center justify-center rounded-[var(--radius-md)] border border-border bg-transparent text-text-2 transition-colors ${
+        disabled
+          ? "cursor-not-allowed opacity-40"
+          : tone === "danger"
+            ? "cursor-pointer hover:border-red hover:bg-red-light hover:text-red"
+            : "cursor-pointer hover:border-text hover:bg-text hover:text-green"
       }`}
     >
       {children}

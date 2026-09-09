@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { ExternalLink, MessageCircle, Pencil, UserMinus, UserPlus } from "lucide-react";
 import { Avatar, Badge, CountryBadge, Stars, Tag } from "@/components/ui/primitives";
 import {
@@ -8,19 +8,22 @@ import {
   DetailRow,
   Drawer,
   DrawerCloseButton,
+  DrawerExpandButton,
   DrawerFooter,
   DrawerHeader,
   DrawerIconButton,
 } from "@/components/ui/Drawer";
 import { EntityAttachments } from "@/components/ui/EntityAttachments";
 import { PROVIDER_STATUS_COLORS, statusColor } from "@/lib/constants";
+import { descripcionHistorial, fmtFechaHora } from "@/lib/historial";
 import { toSafeHref } from "@/lib/url-safety";
 import { proveedorAdjuntosApi } from "@/services/api/proveedor-adjuntos-service";
+import { historialApi } from "@/services/api/historial-service";
 import { useAuthStore } from "@/store/auth-store";
 import { useCatalogosStore } from "@/store/catalogos-store";
 import { useProvidersStore } from "@/store/providers-store";
 import { useUiStore } from "@/store/ui-store";
-import type { Proveedor } from "@/types/api";
+import type { HistorialCambio, Proveedor } from "@/types/api";
 
 /**
  * Sin botón de eliminar: aquí solo se mira y se puede editar. Eliminar (o
@@ -43,12 +46,45 @@ export function ProviderDetail({
   const { paises, categoriasProveedor, servicios, regionesPorPais, ciudadesPorRegion, fetchBase, fetchRegiones, fetchCiudades } =
     useCatalogosStore();
 
+  const [historial, setHistorial] = useState<HistorialCambio[]>([]);
+  const [historialCargando, setHistorialCargando] = useState(false);
+  // Alicia 2026-09-08: "que lo pueda agrandar un poquito" -- el panel de
+  // detalle empieza angosto (520px) y se puede agrandar con un clic.
+  const [wide, setWide] = useState(false);
+
   useEffect(() => {
     if (!provider) return;
     fetchBase();
     if (provider.paisId) fetchRegiones(provider.paisId);
     if (provider.regionId) fetchCiudades(provider.regionId);
   }, [provider, fetchBase, fetchRegiones, fetchCiudades]);
+
+  // Historial de cambios (docs/19/20) -- mismo patrón que ClienteDetail, la pantalla
+  // que lo estrenó; a Proveedores y Proyectos nunca les había llegado esta sección
+  // aunque el backend ya registra los cambios de las 3 entidades por igual.
+  useEffect(() => {
+    if (!provider) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- limpia el historial del proveedor anterior al cerrar el drawer
+      setHistorial([]);
+      return;
+    }
+    let cancelado = false;
+    setHistorialCargando(true);
+    historialApi
+      .porEntidad("proveedor", provider.id)
+      .then((rows) => {
+        if (!cancelado) setHistorial(rows);
+      })
+      .catch(() => {
+        if (!cancelado) setHistorial([]);
+      })
+      .finally(() => {
+        if (!cancelado) setHistorialCargando(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [provider]);
 
   if (!provider) return <Drawer open={false} onClose={onClose} size="detail"><></></Drawer>;
 
@@ -102,7 +138,7 @@ export function ProviderDetail({
   }
 
   return (
-    <Drawer open={Boolean(provider)} onClose={onClose} size="detail">
+    <Drawer open={Boolean(provider)} onClose={onClose} size="detail" wide={wide}>
       <DrawerHeader>
         <Avatar nombre={provider.nombre} size="lg" />
         <div className="min-w-0 flex-1">
@@ -112,6 +148,7 @@ export function ProviderDetail({
           </div>
         </div>
         <div className="flex flex-shrink-0 gap-1.5">
+          <DrawerExpandButton wide={wide} onToggle={() => setWide((w) => !w)} />
           <DrawerIconButton label="Editar proveedor" onClick={onEdit}>
             <Pencil size={15} strokeWidth={1.8} />
           </DrawerIconButton>
@@ -288,6 +325,25 @@ export function ProviderDetail({
 
         <DetailBox title="Archivos y enlaces" tone="plain">
           <EntityAttachments entityId={provider.id} api={proveedorAdjuntosApi} />
+        </DetailBox>
+
+        <DetailBox title="Historial de cambios" tone="plain">
+          {historialCargando ? (
+            <div className="py-1 text-sm text-text-3">Cargando…</div>
+          ) : historial.length === 0 ? (
+            <div className="py-1 text-sm text-text-3">Todavía no hay cambios registrados.</div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {historial.map((h) => (
+                <div key={h.id} className="border-l-2 border-border pl-3 text-[13px]">
+                  <div>
+                    <b className="font-semibold">{h.usuarioNombre || "Alguien"}</b> {descripcionHistorial(h)}
+                  </div>
+                  <div className="font-mono text-[11px] text-text-3">{fmtFechaHora(h.fecha)}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </DetailBox>
       </div>
 
